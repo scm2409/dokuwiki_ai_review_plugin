@@ -21,6 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN a2enmod rewrite
 
+# Re-check file mtimes on every request. With PHP's default
+# opcache.revalidate_freq=2 a config or plugin file edited moments earlier is
+# still served from the opcode cache, which makes bind-mounted plugin changes
+# appear not to take effect and makes any test that rewrites config
+# non-deterministic. Test environment only.
+RUN printf 'opcache.validate_timestamps=1\nopcache.revalidate_freq=0\n' \
+    > /usr/local/etc/php/conf.d/zz-testenv-opcache.ini
+
 WORKDIR /var/www/html
 
 # --- DokuWiki core, pinned to the exact target release ---
