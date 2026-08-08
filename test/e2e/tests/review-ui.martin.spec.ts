@@ -20,6 +20,20 @@ async function queueAsKail(request: any, pageId: string, text: string, summary: 
   return Number(match[1]);
 }
 
+test('martin has a discoverable link to the review queue in Site Tools', async ({ page }) => {
+  // DokuWiki's own "Admin" menu entry only shows for $INFO['ismanager']
+  // (inc/Menu/Item/Admin.php), which martin - a reviewer via a dedicated
+  // group, not a DokuWiki manager - never is. Without our own menu item
+  // (QueueMenuItem via MENU_ITEMS_ASSEMBLY) there would be no link to the
+  // queue anywhere except a banner on a page that already has a pending
+  // change on it.
+  await page.goto('/doku.php?id=start');
+  const link = page.locator('a[href*="do=admin"][href*="page=reviewqueue"]');
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(page).toHaveURL(/do=admin.*page=reviewqueue|page=reviewqueue.*do=admin/);
+});
+
 test('martin sees a pending change with a diff and can approve it', async ({ page, request }) => {
   const pageId = `uiapprove${Date.now()}`;
   const rqid = await queueAsKail(request, pageId, 'content from kail', 'kail summary');

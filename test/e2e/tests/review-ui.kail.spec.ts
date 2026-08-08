@@ -9,3 +9,8 @@ test('kail cannot access the review queue admin page', async ({ page, request })
   const text = await res!.text();
   expect(text).not.toContain('reviewqueue-item');
 });
+
+test('kail has no review queue link in Site Tools', async ({ page }) => {
+  await page.goto('/doku.php?id=start');
+  await expect(page.locator('a[href*="page=reviewqueue"]')).toHaveCount(0);
+});

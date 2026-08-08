@@ -3,9 +3,13 @@
 use dokuwiki\Extension\ActionPlugin;
 use dokuwiki\Extension\Event;
 use dokuwiki\Extension\EventHandler;
+use dokuwiki\plugin\reviewqueue\meta\QueueMenuItem;
 
 /**
- * Shows reviewers a banner on pages that have pending changes waiting.
+ * Gives reviewers two ways to discover the review queue: a banner on pages
+ * that currently have a pending change, and a permanent "Review Queue"
+ * entry in the Site Tools menu (visible to anyone in reviewer_groups, not
+ * just DokuWiki managers/admins - see QueueMenuItem).
  *
  * TPL_CONTENT_DISPLAY fires after the page content is rendered but before
  * it's echoed, with $event->data holding the full HTML output by reference
@@ -17,6 +21,29 @@ class action_plugin_reviewqueue_banner extends ActionPlugin
     public function register(EventHandler $controller)
     {
         $controller->register_hook('TPL_CONTENT_DISPLAY', 'BEFORE', $this, 'handleContentDisplay');
+        $controller->register_hook('MENU_ITEMS_ASSEMBLY', 'AFTER', $this, 'handleMenuAssembly');
+    }
+
+    /**
+     * Adds a "Review Queue" entry to the Site Tools menu for reviewers.
+     *
+     * DokuWiki's own "Admin" menu entry (inc/Menu/Item/Admin.php) only
+     * shows for $INFO['ismanager'], which a reviewer in a dedicated group
+     * (not DokuWiki admin/manager) never is - without this, there would be
+     * no link to the queue anywhere except a banner on a page that already
+     * happens to have a pending change on it.
+     */
+    public function handleMenuAssembly(Event $event, $param)
+    {
+        global $INPUT;
+
+        if ($event->data['view'] !== 'site') return;
+
+        /** @var helper_plugin_reviewqueue_policy $policy */
+        $policy = $this->loadHelper('reviewqueue_policy');
+        if (!$policy->isReviewer($INPUT->server->str('REMOTE_USER'))) return;
+
+        $event->data['items'][] = new QueueMenuItem();
     }
 
     public function handleContentDisplay(Event $event, $param)
