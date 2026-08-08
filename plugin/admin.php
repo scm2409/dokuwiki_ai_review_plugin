@@ -67,6 +67,10 @@ class admin_plugin_reviewqueue extends AdminPlugin
             msg($this->getLang('no_self_review'), -1);
             return;
         }
+        if (!$this->policy->mayReviewTarget($user, $record['target'], $record['type'])) {
+            msg($this->getLang('not_found'), -1);
+            return;
+        }
 
         /** @var helper_plugin_reviewqueue_apply $apply */
         $apply = $this->loadHelper('reviewqueue_apply');
@@ -108,9 +112,15 @@ class admin_plugin_reviewqueue extends AdminPlugin
     {
         echo '<h1>' . hsc($this->getLang('menu')) . '</h1>';
 
+        global $INPUT;
+        $user = $INPUT->server->str('REMOTE_USER');
+
         $records = $this->store->listChanges();
-        $open = array_filter($records, static function ($r) {
-            return in_array($r['state'], ['pending', 'conflicted'], true);
+        $open = array_filter($records, function ($r) use ($user) {
+            if (!in_array($r['state'], ['pending', 'conflicted'], true)) return false;
+            // Don't list changes to pages this reviewer may not read - the
+            // queue must not become a way around the wiki's own ACLs.
+            return $this->policy->mayReviewTarget($user, $r['target'], $r['type']);
         });
 
         if (!$open) {

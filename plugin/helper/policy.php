@@ -68,6 +68,28 @@ class helper_plugin_reviewqueue_policy extends Plugin
         return (bool) array_intersect($groups, $this->splitConf('reviewer_groups'));
     }
 
+    /**
+     * May this user act on a change targeting this page/media id?
+     *
+     * Being a reviewer is not on its own enough: a reviewer who may not read
+     * the target page must not see its queued content either, or the queue
+     * becomes a way around the wiki's own ACLs. Kept separate from
+     * isReviewer() so the caller can tell "not a reviewer" from "reviewer,
+     * but not for this page".
+     *
+     * @param string $user
+     * @param string $target page or media id
+     * @param string $type 'page' or 'media'
+     * @return bool
+     */
+    public function mayReviewTarget($user, $target, $type = 'page')
+    {
+        if (!$this->isReviewer($user)) return false;
+
+        $need = $type === 'media' ? AUTH_UPLOAD : AUTH_READ;
+        return auth_quickaclcheck($target) >= $need;
+    }
+
     public function reviewMedia()
     {
         return (bool) $this->getConf('review_media');

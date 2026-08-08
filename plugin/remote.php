@@ -261,7 +261,12 @@ class remote_plugin_reviewqueue extends RemotePlugin
 
         /** @var helper_plugin_reviewqueue_policy $policy */
         $policy = $this->loadHelper('reviewqueue_policy');
-        if ($record['author'] !== $user && !$policy->isReviewer($user)) {
+
+        // Your own change, or one you are entitled to review - which requires
+        // read access to the target, not merely reviewer status, so the queue
+        // cannot be used to read around the wiki's ACLs.
+        $mine = $record['author'] === $user;
+        if (!$mine && !$policy->mayReviewTarget($user, $record['target'], $record['type'])) {
             throw new AccessDeniedException('This change is not yours', 111);
         }
         return $record;

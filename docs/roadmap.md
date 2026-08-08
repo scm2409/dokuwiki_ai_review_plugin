@@ -13,7 +13,7 @@ Statusanker über Sessions hinweg. Vor Beginn einer neuen Arbeitssitzung hier le
 | 6 | 3-Wege-Merge / Konflikte | ✅ erledigt | `main` | Diff3-Automerge + manuelle Auflösung; Kaos-Bug in Diff3 umgangen |
 | 7 | Media-Uploads | ✅ erledigt | `main` | Queue + Freigabe, Byte-Integrität getestet |
 | 8 | remote.php + MCP-Verifikation | ✅ erledigt | `main` | vorgezogen wegen ADR-0004; 4 MCP-Tools live verifiziert |
-| 9 | Härtung, Security-Review, Doku | ⏳ offen | — | |
+| 9 | Härtung, Security-Review, Doku | ✅ erledigt | `main` | ACL-Lücke geschlossen, CLI, usage.md, 46 Tests |
 
 Details je Phase siehe der freigegebene Plan unter
 `/home/martin/.claude/plans/ber-neues-projekt-starten-atomic-feigenbaum.md`.

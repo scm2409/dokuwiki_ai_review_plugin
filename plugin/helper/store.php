@@ -166,14 +166,52 @@ class helper_plugin_reviewqueue_store extends Plugin
     public function archive($id)
     {
         $this->ensureDirs();
-        foreach (['json', 'content', 'base', 'media'] as $ext) {
+
+        // Move the payload first and the metadata last. There is no atomic
+        // multi-file rename, so if this is interrupted the change simply stays
+        // in the queue (its .json is what listChanges() goes by) rather than
+        // becoming a half-archived entry with no content.
+        $moved = [];
+        foreach (['content', 'base', 'media', 'json'] as $ext) {
             $from = $this->queueFile($id, $ext);
             if (!file_exists($from)) continue;
             $to = $this->archiveFile($id, $ext);
-            if (!@rename($from, $to)) {
-                throw new \RuntimeException("reviewqueue: failed to archive pending change #$id");
+            if (@rename($from, $to)) {
+                $moved[] = [$to, $from];
+                continue;
             }
+            // Roll back so the change stays consistently in the queue.
+            foreach ($moved as [$movedTo, $movedFrom]) {
+                @rename($movedTo, $movedFrom);
+            }
+            throw new \RuntimeException("reviewqueue: failed to archive pending change #$id");
         }
+    }
+
+    /**
+     * Archive changes that have been sitting in the queue for too long.
+     *
+     * @param int $days age threshold; 0 disables expiry
+     * @return int number of changes archived
+     */
+    public function expireOlderThan($days)
+    {
+        $days = (int) $days;
+        if ($days <= 0) return 0;
+
+        $cutoff = time() - ($days * 86400);
+        $count = 0;
+
+        foreach ($this->listChanges(['state' => 'pending']) as $record) {
+            if ($record['created'] > $cutoff) continue;
+            $record['state'] = 'superseded';
+            $record['comment'] = 'Expired after ' . $days . ' days without review.';
+            $this->update($record);
+            $this->archive($record['id']);
+            $count++;
+        }
+
+        return $count;
     }
 
     /**
