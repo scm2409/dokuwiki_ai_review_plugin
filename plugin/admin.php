@@ -1,0 +1,157 @@
+<?php
+
+use dokuwiki\Extension\AdminPlugin;
+use dokuwiki\Form\Form;
+
+/**
+ * Review queue admin page: lists pending changes with a diff against the
+ * current live page, and lets reviewers approve or reject them.
+ *
+ * handle()/html() are called by dokuwiki\Action\Admin::preProcess() for
+ * every request to this admin page (see docs/research/kaos-hooks.md) -
+ * handle() processes an approve/reject POST first, html() then renders the
+ * (possibly now-shorter) queue. Access is gated by isReviewer(), not
+ * DokuWiki's own admin/manager rights (see ADR on reviewer_groups in
+ * docs/design/spec.md).
+ */
+class admin_plugin_reviewqueue extends AdminPlugin
+{
+    /** @var helper_plugin_reviewqueue_policy */
+    protected $policy;
+    /** @var helper_plugin_reviewqueue_store */
+    protected $store;
+
+    public function __construct()
+    {
+        $this->policy = $this->loadHelper('reviewqueue_policy');
+        $this->store  = $this->loadHelper('reviewqueue_store');
+    }
+
+    public function forAdminOnly()
+    {
+        return false; // gated by isAccessibleByCurrentUser() below instead
+    }
+
+    public function isAccessibleByCurrentUser()
+    {
+        global $INPUT;
+        return $this->policy->isReviewer($INPUT->server->str('REMOTE_USER'));
+    }
+
+    public function getMenuText($language)
+    {
+        return $this->getLang('menu');
+    }
+
+    public function handle()
+    {
+        global $INPUT, $ID;
+
+        $rqaction = $INPUT->str('rqaction');
+        if ($rqaction === '' || !checkSecurityToken()) return;
+
+        $id = $INPUT->int('rqid');
+        $record = $this->store->get($id);
+        $user = $INPUT->server->str('REMOTE_USER');
+
+        if (!$record || $record['state'] !== 'pending') {
+            msg($this->getLang('not_found'), -1);
+            return;
+        }
+        if ($record['author'] === $user) {
+            msg($this->getLang('no_self_review'), -1);
+            return;
+        }
+
+        /** @var helper_plugin_reviewqueue_apply $apply */
+        $apply = $this->loadHelper('reviewqueue_apply');
+
+        try {
+            if ($rqaction === 'approve') {
+                $result = $apply->approve($record, $user);
+                if ($result === 'conflicted') {
+                    msg(sprintf($this->getLang('conflicted'), $id), -1);
+                } else {
+                    msg(sprintf($this->getLang('approved'), $id), 1);
+                }
+            } elseif ($rqaction === 'reject') {
+                $apply->reject($record, $user, $INPUT->str('rqcomment'));
+                msg(sprintf($this->getLang('rejected'), $id), 1);
+            }
+        } catch (\Throwable $e) {
+            msg($this->getLang('apply_failed'), -1);
+        }
+
+        send_redirect(wl($ID, ['do' => 'admin', 'page' => 'reviewqueue'], true, '&'));
+    }
+
+    public function html()
+    {
+        echo '<h1>' . hsc($this->getLang('menu')) . '</h1>';
+
+        $records = $this->store->listChanges();
+        $open = array_filter($records, static function ($r) {
+            return in_array($r['state'], ['pending', 'conflicted'], true);
+        });
+
+        if (!$open) {
+            echo '<p>' . hsc($this->getLang('empty')) . '</p>';
+            return;
+        }
+
+        foreach ($open as $record) {
+            $this->renderRecord($record);
+        }
+    }
+
+    protected function renderRecord(array $record)
+    {
+        $id = $record['id'];
+
+        echo '<div class="reviewqueue-item">';
+        echo '<h2>#' . $id . ' &mdash; ' . hsc($record['target']) . '</h2>';
+        echo '<p>' . sprintf(
+            hsc($this->getLang('meta')),
+            hsc($record['author']),
+            hsc($record['summary']),
+            dformat($record['created'])
+        ) . '</p>';
+
+        if ($record['state'] === 'conflicted') {
+            echo '<p class="reviewqueue-conflict">' . hsc($this->getLang('conflict_notice')) . '</p>';
+        }
+
+        if ($record['type'] === 'page') {
+            $this->renderDiff($record);
+        }
+
+        if ($record['state'] === 'pending') {
+            $this->renderForm($record);
+        }
+
+        echo '</div>';
+    }
+
+    protected function renderDiff(array $record)
+    {
+        $old = explode("\n", rawWiki($record['target']));
+        $new = explode("\n", $this->store->getContent($record['id']));
+
+        $diff = new \Diff($old, $new);
+        $formatter = new \TableDiffFormatter();
+
+        echo '<table class="diff">' . $formatter->format($diff) . '</table>';
+    }
+
+    protected function renderForm(array $record)
+    {
+        $form = new Form(['method' => 'POST']);
+        $form->setHiddenField('do', 'admin');
+        $form->setHiddenField('page', 'reviewqueue');
+        $form->setHiddenField('rqid', $record['id']);
+        $form->addTextInput('rqcomment', $this->getLang('comment_label'));
+        $form->addButton('rqaction', $this->getLang('btn_approve'))->attr('value', 'approve');
+        $form->addButton('rqaction', $this->getLang('btn_reject'))->attr('value', 'reject');
+        echo $form->toHTML();
+    }
+}

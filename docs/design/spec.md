@@ -71,7 +71,7 @@ Einzige Entscheidungsstelle: `helper/policy.php::needsReview($user, array $group
 ```php
 $conf['review_users']    = 'kail';   // kommasepariert, exakte Usernamen
 $conf['review_groups']   = '';       // kommasepariert, DokuWiki-Gruppen
-$conf['reviewer_groups'] = 'admin';  // wer freigeben/ablehnen darf
+$conf['reviewer_groups'] = 'reviewer'; // wer freigeben/ablehnen darf
 $conf['review_media']    = 1;        // Media-Uploads einbeziehen?
 $conf['review_delete']   = 1;        // Löschungen einbeziehen? (technisch: leerer Text)
 $conf['auto_merge']      = 1;        // Diff3-Automerge bei Freigabe versuchen?
@@ -88,14 +88,12 @@ Umsetzung von "keine Nebenwirkungen für andere Benutzer".
 
 | Datei | Hook | BEFORE/AFTER | Aufgabe |
 |---|---|---|---|
-| `action/save.php` | `ACTION_ACT_PREPROCESS` | BEFORE | Browser-Save: bei `needsReview()` → Text in Queue, Redirect auf Bestätigungsseite statt normalem Save-Flow |
-| `action/save.php` | `COMMON_WIKIPAGE_SAVE` | BEFORE | Sicherheitsnetz für alle Pfade (Remote/CLI/Fremdplugins): Queue + `preventDefault()`. Remote-Kontext → `RemoteException` (ADR-0003) |
-| `action/media.php` | `MEDIA_UPLOAD_FINISH` | BEFORE | Upload-Bytes in Queue kopieren, `preventDefault()` |
-| `action/review.php` | `ACTION_ACT_PREPROCESS` | BEFORE | `do=reviewqueue_approve`/`_reject`/`_resolve`, `checkSecurityToken()` Pflicht, Selbst-Freigabe verboten |
-| `action/banner.php` | `TPL_ACT_RENDER` | BEFORE | Banner einblenden, nur wenn aktueller User in `reviewer_groups` **und** offene Pending-Changes für diese Seite existieren |
-| `action/banner.php` | `MENU_ITEMS_ASSEMBLY` | AFTER | Menüpunkt "Review-Queue" für Reviewer |
-| `admin.php` | `AdminPlugin`-Interface | — | Queue-Liste (gruppiert nach Ziel-Seite), Diff-Ansicht, Approve/Reject/Edit-vor-Approve |
-| `remote.php` | `RemotePlugin`-Interface | — | `listMyPending`, `getStatus`, `getPendingChange`, `listQueue` (nur für Reviewer) |
+| `action/save.php` | `ACTION_ACT_PREPROCESS` | BEFORE | Reiner Marker (kein `preventDefault()`, keine Datenänderung): merkt sich, dass dieser Request DokuWikis eigener interaktiver `save`-Act ist, damit `handleWikipageSave()` unten zwischen "Mensch am Editor" (freundlicher Hinweis) und jedem anderen Aufrufer (harte `RemoteException`) unterscheiden kann — ganz ohne fragile Skriptname-Erkennung |
+| `action/save.php` | `COMMON_WIKIPAGE_SAVE` | BEFORE | **Der eigentliche Interceptionspunkt für alle Pfade** (Browser, Remote-API, MCP, CLI, Fremdplugins) — Queue + `preventDefault()`. Browser → `msg()`; alles andere → `RemoteException` (ADR-0003) |
+| `action/media.php` | `MEDIA_UPLOAD_FINISH` | BEFORE | Upload-Bytes in Queue kopieren, `preventDefault()` (Phase 7) |
+| `action/banner.php` | `TPL_CONTENT_DISPLAY` | BEFORE | Banner voranstellen (`$event->data` ist der gerenderte HTML-String, per Referenz — siehe `docs/research/kaos-hooks.md`), nur wenn `show_banner` an, aktueller User `isReviewer()` **und** offene Pending-Changes für diese Seite existieren |
+| `admin.php` | `AdminPlugin`-Interface | — | `handle()`/`html()` werden von `dokuwiki\Action\Admin::preProcess()` für jeden Request auf die Seite aufgerufen (`handle()` verarbeitet ein Approve/Reject-POST inkl. `checkSecurityToken()` und Selbst-Freigabe-Verbot, danach `html()` für Queue-Liste + Diff). `isAccessibleByCurrentUser()` ist überschrieben auf `isReviewer()` statt DokuWiki-Admin/Manager-Rechte — kein separates `action/review.php` nötig, das ist der native AdminPlugin-Mechanismus dafür |
+| `remote.php` | `RemotePlugin`-Interface | — | `listMyPending`, `getStatus`, `getPendingChange`, `listQueue` (nur für Reviewer) (Phase 8) |
 
 ### Re-Entrancy
 
@@ -123,9 +121,18 @@ würde die Freigabe sich selbst wieder in die Queue stellen.
 6. Pending-Change-Eintrag nach `archive/` verschieben, `state = approved`,
    `reviewer`/`reviewedAt` setzen.
 
-**Selbst-Freigabe-Verbot:** `action/review.php` prüft `$pending['author'] !==
+**Selbst-Freigabe-Verbot:** `admin.php::handle()` prüft `$record['author'] !==
 $_SERVER['REMOTE_USER']` vor jeder Approve/Reject-Aktion — auch wenn der Autor zufällig
 in `reviewer_groups` wäre.
+
+### Umsetzungsstand (Phase 5)
+
+Implementiert und gegen den echten Container verifiziert: `helper/apply.php` (Schritte
+3–6, Schritt 2 aktuell nur der `clean`-Fall — Hash-Vergleich gegen `baseHash`; bei
+Abweichung wird `state=conflicted` gesetzt statt automatisch zu mergen), `admin.php`
+(Queue-Liste, Diff via `Diff`/`TableDiffFormatter`, Approve/Reject-Formular),
+`action/banner.php`. Der `Diff3`-Automerge-Versuch für den `conflicted`-Fall sowie ein
+Resolution-Editor dafür kommen in Phase 6.
 
 ## Fail-closed (Leitprinzip, siehe `CLAUDE.md`)
 

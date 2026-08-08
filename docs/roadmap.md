@@ -9,7 +9,7 @@ Statusanker über Sessions hinweg. Vor Beginn einer neuen Arbeitssitzung hier le
 | 2 | ADRs + Spec | ✅ erledigt | `main` | ADR-0001..0003, spec.md, testing/strategy.md |
 | 3 | Testumgebung (Podman + Playwright) | ✅ erledigt | `main` | Container läuft, 8/8 Smoke-Tests grün, MCP-Handshake real verifiziert |
 | 4 | Plugin-Kern (Policy, Store, Save-Interception) | ✅ erledigt | `main` | 13/13 Tests grün, alle 3 Pfade (Browser/JSON-RPC/MCP) live verifiziert |
-| 5 | Review-UI (Admin-Queue, Diff, Banner) | ⏳ offen | — | |
+| 5 | Review-UI (Admin-Queue, Diff, Banner) | ✅ erledigt | `main` | 17/17 Tests grün, kompletter Approve/Reject-Loop live verifiziert |
 | 6 | 3-Wege-Merge / Konflikte | ⏳ offen | — | |
 | 7 | Media-Uploads | ⏳ offen | — | |
 | 8 | remote.php + MCP-Verifikation | ⏳ offen | — | |
