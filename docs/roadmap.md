@@ -5,8 +5,8 @@ Statusanker über Sessions hinweg. Vor Beginn einer neuen Arbeitssitzung hier le
 | # | Phase | Status | Branch | Notizen |
 |---|---|---|---|---|
 | 0 | Repo-Bootstrap | ✅ erledigt | `main` | git init, Grundgerüst, CLAUDE.md |
-| 1 | Recherche dokumentieren | ⏳ offen | — | |
-| 2 | ADRs + Spec | ⏳ offen | — | |
+| 1 | Recherche dokumentieren | ✅ erledigt | `main` | existing-plugins.md, kaos-hooks.md |
+| 2 | ADRs + Spec | ✅ erledigt | `main` | ADR-0001..0003, spec.md, testing/strategy.md |
 | 3 | Testumgebung (Podman + Playwright) | ⏳ offen | — | |
 | 4 | Plugin-Kern (Policy, Store, Save-Interception) | ⏳ offen | — | |
 | 5 | Review-UI (Admin-Queue, Diff, Banner) | ⏳ offen | — | |
