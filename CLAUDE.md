@@ -45,6 +45,14 @@ Der vollständige, freigegebene Plan liegt unter
 - Referenz-Klon des `approve`-Plugins (Muster für Plugin-Struktur, NICHT für das
   Review-Modell) lag unter `scratchpad/approve` — beim Recherchieren angelegt, nicht
   Teil des Repos.
+- **Falle:** `$conf['savedir']` bleibt bei DokuWiki bewusst der rohe, oft relative
+  Config-Wert (`'./data'`). Core löst nur die *abgeleiteten* Pfade (`$conf['datadir']`,
+  `$conf['lockdir']`, …) über `init_path()`/`fullpath()` in `inc/init.php` gegen
+  `DOKU_INC` auf. Eigener Code, der `$conf['savedir']` direkt für Pfade nutzt, schreibt
+  je nach aufrufendem Einstiegsskript (unterschiedliches `cwd`: `doku.php` vs.
+  `lib/exe/jsonrpc.php` vs. `lib/plugins/mcp/mcp.php`) an unterschiedliche, teils falsche
+  Orte. Fix/Konvention im Plugin: `dirname($conf['datadir'])` statt `$conf['savedir']`
+  (siehe `plugin/helper/store.php::dataDir()`).
 
 ## Arbeitsweise in diesem Projekt
 
