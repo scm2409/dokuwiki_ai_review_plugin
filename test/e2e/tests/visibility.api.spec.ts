@@ -120,6 +120,32 @@ test('listMyPending and getStatus report the author own changes', async ({ reque
   expect(text.result).toBe('some draft');
 });
 
+test('queuing a change does not strand the page lock against other editors', async ({
+  request,
+}) => {
+  // ApiCore::savePage() is lock() -> saveWikiText() -> unlock(). Our
+  // RemoteException is thrown from inside saveWikiText(), so without an
+  // explicit release the unlock() never runs and the page stays locked for
+  // the whole lock timeout - letting a busy agent block human editors out
+  // of every page it touches.
+  const pageId = `vislock${Date.now()}`;
+  await rpc(request, tokens.martin, 'core.savePage', {
+    page: pageId,
+    text: 'base',
+    summary: 'setup',
+  });
+
+  await queue(request, pageId, 'kail draft');
+
+  const martinSave = await rpc(request, tokens.martin, 'core.savePage', {
+    page: pageId,
+    text: 'martin edits right after',
+    summary: 'after queue',
+  });
+  expect(martinSave.error).toBeUndefined();
+  expect(martinSave.result).toBe(true);
+});
+
 test('a reviewer may read a pending change, an unknown id errors out', async ({ request }) => {
   const pageId = `visacl${Date.now()}`;
   const { id } = await queue(request, pageId, 'kail private draft');

@@ -5,7 +5,13 @@ const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: './tests',
-  fullyParallel: false, // tests share one DokuWiki instance and its queue state
+  // Every test runs against one shared DokuWiki: one review queue, and one
+  // login session per user (the storageState is reused across specs). DokuWiki
+  // carries msg() notices through that session, so a concurrently running spec
+  // can consume the notice another spec is asserting on. Serialising removes a
+  // whole class of flakiness for a suite that only takes seconds anyway.
+  fullyParallel: false,
+  workers: 1,
   retries: 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   timeout: 30_000,

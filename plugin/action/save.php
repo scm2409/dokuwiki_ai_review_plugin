@@ -117,6 +117,16 @@ class action_plugin_reviewqueue_save extends ActionPlugin
 
         // Remote API / CLI / another plugin: always a hard, catchable error
         // so nothing mistakes a queued change for a live save (ADR-0003).
+        //
+        // ApiCore::savePage() wraps the save as lock() -> saveWikiText() ->
+        // unlock(), so throwing from inside saveWikiText() skips its unlock()
+        // and strands the page lock for the full lock timeout. That would let
+        // a busy agent block human editors out of the pages it touches - the
+        // exact disruption this plugin exists to avoid. Release it ourselves
+        // before throwing. Not needed on the browser path, which returns
+        // normally and lets dokuwiki\Action\Save do its own unlock().
+        unlock($data['id']);
+
         if ($failure) {
             throw new RemoteException($this->getLang('queue_failed'), 500, $failure);
         }
