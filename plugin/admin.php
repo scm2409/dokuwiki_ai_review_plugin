@@ -99,17 +99,40 @@ class admin_plugin_reviewqueue extends AdminPlugin
             return;
         }
 
+        // Several open changes on the same page are each based on the live
+        // revision rather than on each other (a queued change is invisible in
+        // the read path, ADR-0004), so approving more than one silently
+        // overwrites the earlier ones. Warn per affected page.
+        $stacked = [];
         foreach ($open as $record) {
-            $this->renderRecord($record);
+            $stacked[$record['target']][] = $record['id'];
+        }
+
+        foreach ($open as $record) {
+            $siblings = $stacked[$record['target']];
+            $this->renderRecord($record, count($siblings) > 1 ? $siblings : []);
         }
     }
 
-    protected function renderRecord(array $record)
+    /**
+     * @param array $record
+     * @param int[] $siblings ids of all open changes on the same page, when
+     *                        there is more than one; empty otherwise
+     */
+    protected function renderRecord(array $record, array $siblings = [])
     {
         $id = $record['id'];
 
-        echo '<div class="reviewqueue-item">';
+        echo '<div class="reviewqueue-item" data-rqid="' . $id . '">';
         echo '<h2>#' . $id . ' &mdash; ' . hsc($record['target']) . '</h2>';
+
+        if ($siblings) {
+            echo '<p class="reviewqueue-stacked">' . sprintf(
+                hsc($this->getLang('stacked_notice')),
+                count($siblings),
+                hsc(implode(', #', $siblings))
+            ) . '</p>';
+        }
         echo '<p>' . sprintf(
             hsc($this->getLang('meta')),
             hsc($record['author']),

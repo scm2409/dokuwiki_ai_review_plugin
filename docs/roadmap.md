@@ -12,7 +12,7 @@ Statusanker über Sessions hinweg. Vor Beginn einer neuen Arbeitssitzung hier le
 | 5 | Review-UI (Admin-Queue, Diff, Banner) | ✅ erledigt | `main` | 17/17 Tests grün, kompletter Approve/Reject-Loop live verifiziert |
 | 6 | 3-Wege-Merge / Konflikte | ⏳ offen | — | |
 | 7 | Media-Uploads | ⏳ offen | — | |
-| 8 | remote.php + MCP-Verifikation | ⏳ offen | — | |
+| 8 | remote.php + MCP-Verifikation | ✅ erledigt | `main` | vorgezogen wegen ADR-0004; 4 MCP-Tools live verifiziert |
 | 9 | Härtung, Security-Review, Doku | ⏳ offen | — | |
 
 Details je Phase siehe der freigegebene Plan unter

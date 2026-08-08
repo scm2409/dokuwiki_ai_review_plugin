@@ -1,7 +1,8 @@
 <?php
 
-$lang['queued']       = "Ihre Änderung an '%s' wurde als Änderung #%d zur Prüfung eingereicht. Sie ist NOCH NICHT live.";
-$lang['queue_failed'] = 'Die Review-Warteschlange konnte nicht geschrieben werden, Ihre Änderung wurde nicht gespeichert. Bitte versuchen Sie es erneut oder wenden Sie sich an eine Administratorin/einen Administrator.';
+$lang['queued']         = "Ihre Änderung an '%s' wurde als Änderung #%d zur Prüfung eingereicht. Sie ist NOCH NICHT live.";
+$lang['queued_stacked'] = 'Achtung: Für diese Seite liegen bereits ungeprüfte Änderungen %s von Ihnen vor. Diese neue Änderung basiert auf der Live-Fassung, nicht auf jenen — werden alle freigegeben, überschreibt die neueste die frühere Arbeit.';
+$lang['queue_failed']   = 'Die Review-Warteschlange konnte nicht geschrieben werden, Ihre Änderung wurde nicht gespeichert. Bitte versuchen Sie es erneut oder wenden Sie sich an eine Administratorin/einen Administrator.';
 
 $lang['menu']  = 'Review-Warteschlange';
 $lang['empty'] = 'Es liegen keine offenen Änderungen vor.';
@@ -22,3 +23,5 @@ $lang['approved_summary'] = '(freigegeben von %s, Änderung #%d)';
 
 $lang['banner']      = 'Für diese Seite liegen %d offene Änderung(en) zur Prüfung vor.';
 $lang['banner_link'] = 'Review-Warteschlange öffnen';
+
+$lang['stacked_notice'] = 'Vorsicht: Für diese Seite liegen %d ungeprüfte Änderungen vor (#%s), die jeweils auf der Live-Fassung basieren und nicht aufeinander. Werden mehrere freigegeben, überschreiben die späteren die früheren. Bitte einzeln prüfen und die nicht gewünschten ablehnen.';

@@ -1,7 +1,8 @@
 <?php
 
-$lang['queued']       = "Your change to '%s' was submitted for review as change #%d. It is NOT live yet.";
-$lang['queue_failed'] = 'The review queue could not be written to, so your change was not saved. Please try again or contact an administrator.';
+$lang['queued']         = "Your change to '%s' was submitted for review as change #%d. It is NOT live yet.";
+$lang['queued_stacked'] = 'Warning: you already have unreviewed change(s) %s on this page. This new change was based on the live revision, not on those - if all of them are approved, the earlier work will be overwritten.';
+$lang['queue_failed']   = 'The review queue could not be written to, so your change was not saved. Please try again or contact an administrator.';
 
 $lang['menu']  = 'Review Queue';
 $lang['empty'] = 'There are no pending changes.';
@@ -22,3 +23,5 @@ $lang['approved_summary'] = '(reviewed by %s, change #%d)';
 
 $lang['banner']      = 'There are %d pending change(s) on this page waiting for review.';
 $lang['banner_link'] = 'Open the review queue';
+
+$lang['stacked_notice'] = 'Careful: there are %d unreviewed changes for this page (#%s), each based on the live revision rather than on each other. Approving more than one will overwrite the earlier ones. Review them one at a time and reject the ones you do not want.';

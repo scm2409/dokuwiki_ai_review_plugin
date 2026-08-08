@@ -39,7 +39,7 @@ test('martin sees a pending change with a diff and can approve it', async ({ pag
   const rqid = await queueAsKail(request, pageId, 'content from kail', 'kail summary');
 
   await page.goto('/doku.php?do=admin&page=reviewqueue');
-  const item = page.locator('.reviewqueue-item', { hasText: `#${rqid}` });
+  const item = page.locator(`.reviewqueue-item[data-rqid="${rqid}"]`);
   await expect(item).toContainText(pageId);
   await expect(item).toContainText('kail');
   await expect(item.locator('table.diff')).toContainText('content from kail');
@@ -59,7 +59,7 @@ test('martin can reject a change with a comment, page stays unpublished', async 
   const rqid = await queueAsKail(request, pageId, 'rejected content', 'kail summary');
 
   await page.goto('/doku.php?do=admin&page=reviewqueue');
-  const item = page.locator('.reviewqueue-item', { hasText: `#${rqid}` });
+  const item = page.locator(`.reviewqueue-item[data-rqid="${rqid}"]`);
   await item.locator('input[name="rqcomment"]').fill('please rephrase');
   await item.locator('button[name="rqaction"][value="reject"]').click();
 
@@ -67,6 +67,45 @@ test('martin can reject a change with a comment, page stays unpublished', async 
 
   const live = await request.get(`/doku.php?id=${pageId}`);
   expect(await live.text()).not.toContain('rejected content');
+});
+
+test('a rejection reason written by martin is readable by kail via the API', async ({
+  page,
+  request,
+}) => {
+  // The full loop that matters to an agent: it submits, a human rejects with
+  // a reason, and the agent can retrieve that reason to act on it (ADR-0004).
+  const pageId = `uireason${Date.now()}`;
+  const rqid = await queueAsKail(request, pageId, 'draft needing work', 'kail summary');
+
+  await page.goto('/doku.php?do=admin&page=reviewqueue');
+  const item = page.locator(`.reviewqueue-item[data-rqid="${rqid}"]`);
+  await item.locator('input[name="rqcomment"]').fill('too informal, please rewrite');
+  await item.locator('button[name="rqaction"][value="reject"]').click();
+  await expect(page.locator('#dokuwiki__content')).toContainText(`Change #${rqid} rejected`);
+
+  const status = await request.post('/lib/exe/jsonrpc.php', {
+    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
+    data: { jsonrpc: '2.0', method: 'plugin.reviewqueue.getStatus', params: { id: rqid }, id: 1 },
+  });
+  const body = await status.json();
+  expect(body.result.state).toBe('rejected');
+  expect(body.result.comment).toBe('too informal, please rewrite');
+  expect(body.result.reviewer).toBe('martin');
+});
+
+test('the queue warns the reviewer when several changes stack on one page', async ({
+  page,
+  request,
+}) => {
+  const pageId = `uistack${Date.now()}`;
+  const first = await queueAsKail(request, pageId, 'stacked draft one', 's1');
+  const second = await queueAsKail(request, pageId, 'stacked draft two', 's2');
+
+  await page.goto('/doku.php?do=admin&page=reviewqueue');
+  const item = page.locator(`.reviewqueue-item[data-rqid="${second}"]`);
+  await expect(item.locator('.reviewqueue-stacked')).toContainText('unreviewed changes');
+  await expect(item.locator('.reviewqueue-stacked')).toContainText(`#${first}`);
 });
 
 test('approving without a valid CSRF token is rejected', async ({ page, request }) => {

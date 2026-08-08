@@ -80,6 +80,18 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         /** @var helper_plugin_reviewqueue_store $store */
         $store = $this->loadHelper('reviewqueue_store');
 
+        // Look for the author's own still-open changes on this page *before*
+        // enqueuing, so the new one isn't counted. Stacking matters: a queued
+        // change is invisible in the read path (ADR-0004), so an author who
+        // didn't check can easily have based this edit on the live revision
+        // and be about to clobber their own earlier, unreviewed work.
+        $stacked = $store->listChanges([
+            'author' => $user,
+            'state'  => 'pending',
+            'type'   => 'page',
+            'target' => $data['id'],
+        ]);
+
         try {
             $id = $store->enqueue($meta, $data['newContent']);
             $failure = null;
@@ -93,6 +105,12 @@ class action_plugin_reviewqueue_save extends ActionPlugin
                 msg($this->getLang('queue_failed'), -1);
             } else {
                 msg(sprintf($this->getLang('queued'), $data['id'], $id));
+                if ($stacked) {
+                    msg(sprintf(
+                        $this->getLang('queued_stacked'),
+                        '#' . implode(', #', array_column($stacked, 'id'))
+                    ), 2);
+                }
             }
             return; // fail-closed either way: preventDefault() already ran above
         }
@@ -102,6 +120,14 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         if ($failure) {
             throw new RemoteException($this->getLang('queue_failed'), 500, $failure);
         }
-        throw new RemoteException(sprintf($this->getLang('queued'), $data['id'], $id), 1000);
+
+        $message = sprintf($this->getLang('queued'), $data['id'], $id);
+        if ($stacked) {
+            $message .= ' ' . sprintf(
+                $this->getLang('queued_stacked'),
+                '#' . implode(', #', array_column($stacked, 'id'))
+            );
+        }
+        throw new RemoteException($message, 1000);
     }
 }
