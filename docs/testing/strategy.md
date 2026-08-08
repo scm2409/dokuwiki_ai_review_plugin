@@ -102,11 +102,27 @@ ACL, Rendering) hinweg und lässt sich nur end-to-end wirklich verifizieren.
 ## Ausführung
 
 ```bash
-test/env/up.sh          # Container mit frischem data/-Stand hochfahren
-npx playwright test     # gesamte Matrix
-test/env/down.sh
+test/env/up.sh                 # Container bauen/starten, frischer data/-Stand, Tokens erzeugen
+cd test/e2e && npm install     # einmalig
+npx playwright install chromium
+npx playwright test            # gesamte Matrix
+../env/down.sh
 ```
 
-CI-Tauglichkeit (späterer Schritt, nicht Teil der ersten Phasen): dieselben drei Befehle
-in einer Pipeline, `test/env/up.sh` mit `--ci`-Flag für nicht-interaktives Warten auf
-Healthcheck statt Tail auf Logs.
+`up.sh` erzeugt `test/e2e/.auth/tokens.json` (Bearer-Tokens für `martin`/`kail`) und ist
+Voraussetzung für die API-/MCP-Tests. Die Login-Storage-States für die Browser-Tests
+erzeugt Playwright selbst über das `setup`-Projekt (`tests/auth.setup.ts`,
+Standard-Playwright-Auth-Pattern über `dependencies` in `playwright.config.ts`) —
+kein manueller Schritt nötig.
+
+Port konfigurierbar über `REVIEWQUEUE_TEST_PORT` (Default `8080`), muss für `up.sh` und
+`playwright.config.ts` konsistent gesetzt sein.
+
+**Bekannte Einschränkung in dieser Sandbox:** `playwright install --with-deps` scheitert
+ohne `sudo`; `playwright install chromium` (ohne `--with-deps`) reicht hier aus, weil die
+nötigen OS-Bibliotheken bereits vorhanden sind. In einer frischen CI-Umgebung ggf.
+`--with-deps` (mit Root-Rechten) verwenden.
+
+CI-Tauglichkeit (späterer Schritt, nicht Teil der ersten Phasen): dieselben Befehle in
+einer Pipeline, `test/env/up.sh` liefert bereits einen klaren Exit-Code bei
+Startproblemen (30s Poll-Timeout auf `doku.php`).

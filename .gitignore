@@ -1,16 +1,12 @@
 # Scratch / research clones (not part of the plugin)
 /scratchpad/
 
-# DokuWiki test environment - runtime state, never committed
-/test/env/dokuwiki/
-/test/env/data-snapshot/
-/test/env/*.tgz
-
 # Playwright
 /test/e2e/node_modules/
 /test/e2e/test-results/
 /test/e2e/playwright-report/
 /test/e2e/.cache/
+/test/e2e/.auth/
 node_modules/
 
 # PHP / Composer (if PHPUnit is added later)
@@ -23,6 +19,6 @@ composer.lock
 .vscode/
 .idea/
 
-# Local secrets (API tokens for manual testing, etc.)
+# Local secrets
 .env
 .env.local

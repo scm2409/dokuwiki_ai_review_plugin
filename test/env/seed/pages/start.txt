@@ -1,0 +1,10 @@
+====== AI Review Queue Test Wiki ======
+
+This is the seeded start page for the //reviewqueue// plugin's test environment.
+
+  * **martin** — human reviewer, writes go live immediately
+  * **kail** — AI agent account, writes are queued for review
+
+===== Playground =====
+
+See [[playground:test]] for a page used in edit/conflict scenarios.

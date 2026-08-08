@@ -1,0 +1,13 @@
+====== Playground Test Page ======
+
+This page exists to be edited, merged into, and conflicted with during
+end-to-end tests. It has two sections so tests can exercise
+non-overlapping-edit merges as well as overlapping-edit conflicts.
+
+===== Section A =====
+
+Original content of section A.
+
+===== Section B =====
+
+Original content of section B.

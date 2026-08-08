@@ -1,0 +1,54 @@
+# Test environment for the reviewqueue plugin: DokuWiki release-2024-02-06b
+# ("Kaos") pinned exactly, plus the splitbrain/dokuwiki-plugin-mcp plugin
+# pinned to a fixed commit, so that test runs are reproducible.
+#
+# Not for production use - seeded with fixed, weak test credentials.
+
+FROM php:8.2-apache
+
+ARG DOKUWIKI_VERSION=2024-02-06b
+ARG MCP_PLUGIN_COMMIT=c44faefa170c63435ccd19c3a25e84e2e2a24c53
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        libonig-dev \
+        libpng-dev \
+        libpng16-16 \
+    && docker-php-ext-install mbstring gd \
+    && apt-mark manual libpng16-16 \
+    && apt-get purge -y --auto-remove libonig-dev libpng-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN a2enmod rewrite
+
+WORKDIR /var/www/html
+
+# --- DokuWiki core, pinned to the exact target release ---
+RUN curl -fsSL "https://download.dokuwiki.org/src/dokuwiki/dokuwiki-${DOKUWIKI_VERSION}.tgz" -o /tmp/dokuwiki.tgz \
+    && tar -xzf /tmp/dokuwiki.tgz --strip-components=1 -C /var/www/html \
+    && rm /tmp/dokuwiki.tgz
+
+# --- mcp plugin, pinned to a fixed commit (not master) for reproducibility ---
+RUN mkdir -p lib/plugins/mcp \
+    && curl -fsSL "https://github.com/splitbrain/dokuwiki-plugin-mcp/archive/${MCP_PLUGIN_COMMIT}.tar.gz" -o /tmp/mcp.tgz \
+    && tar -xzf /tmp/mcp.tgz --strip-components=1 -C lib/plugins/mcp \
+    && rm /tmp/mcp.tgz
+
+# --- our own plugin (baseline copy; overridden by a bind mount in up.sh for live dev) ---
+RUN mkdir -p lib/plugins/reviewqueue
+COPY plugin/ lib/plugins/reviewqueue/
+
+# --- seeded configuration ---
+COPY test/env/seed/conf/local.php conf/local.php
+COPY test/env/seed/conf/acl.auth.php conf/acl.auth.php
+COPY test/env/seed/gen-users.php /tmp/gen-users.php
+RUN php /tmp/gen-users.php && rm /tmp/gen-users.php
+COPY test/env/seed/gen-tokens.php /usr/local/bin/dokuwiki-gen-tokens.php
+RUN chmod +x /usr/local/bin/dokuwiki-gen-tokens.php
+
+# --- seeded pages ---
+COPY test/env/seed/pages/ data/pages/
+
+RUN chown -R www-data:www-data /var/www/html/data /var/www/html/conf /var/www/html/lib/plugins
+
+EXPOSE 80
