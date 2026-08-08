@@ -90,3 +90,20 @@ verwenden.
 - CSRF über `checkSecurityToken()` in `admin.php::handle()`, mit Test.
 - Selbst-Freigabe-Verbot greift auch bei direktem POST mit gültigem Token, mit Test.
 - Re-Entrancy-Flag wird in `finally` zurückgesetzt, übersteht also Exceptions.
+
+## Nachtrag (Suche über eigene Entwürfe)
+
+### 5. Freigegebene Seiten landen nicht im Suchindex (schwerwiegend)
+
+Beim Testen der Entwurfssuche aufgefallen: `helper/apply.php` rief
+`saveWikiText()` direkt auf, und das rührt den Suchindex nicht an.
+`ApiCore::savePage()` ruft dafür eigens `idx_addPage()` auf, der Browser-Pfad
+verlässt sich auf den Taskrunner beim nächsten Seitenaufruf — eine Freigabe hat
+beides nicht.
+
+Wirkung: Freigegebener Inhalt war zwar live, aber **über die Suche nicht
+auffindbar**, bis zufällig ein unbeteiligter Request den Indexer anstieß. Für ein
+Wiki ein ernster Mangel, und ausgerechnet an der Stelle, an der es um
+Auffindbarkeit geht. Behoben durch `idx_addPage()` nach der Freigabe, mit Test
+(`gaps.martin.spec.ts`, „once approved, a draft leaves the pending search and
+enters the wiki search").

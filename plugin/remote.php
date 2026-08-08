@@ -3,6 +3,7 @@
 use dokuwiki\Extension\RemotePlugin;
 use dokuwiki\Remote\AccessDeniedException;
 use dokuwiki\Remote\RemoteException;
+use dokuwiki\Utf8\PhpString;
 
 /**
  * Remote API for the review queue. Every public method here is exported
@@ -104,6 +105,56 @@ class remote_plugin_reviewqueue extends RemotePlugin
     }
 
     /**
+     * Search the text of your own changes that are still awaiting review.
+     *
+     * The wiki's normal search (core.searchPages) only ever matches published
+     * text, so it cannot find anything you have written but that has not been
+     * approved yet. Run this alongside core.searchPages whenever you search in
+     * order to decide what to write - otherwise you will not see that you
+     * already covered a topic in an unreviewed change, and will write it a
+     * second time on another page.
+     *
+     * Matching is a simple case-insensitive substring search over the proposed
+     * text, the page id and the edit summary. Each hit has keys: "id" (change
+     * id), "target" (page id), "summary", "created" and "snippet" (surrounding
+     * text of the first match).
+     *
+     * @param string $query the text to look for
+     * @return array one entry per matching pending change of yours
+     * @throws RemoteException no query given
+     */
+    public function searchMyPending($query)
+    {
+        $query = trim((string) $query);
+        if ($query === '') throw new RemoteException('No query given', 131);
+
+        /** @var helper_plugin_reviewqueue_store $store */
+        $store = $this->loadHelper('reviewqueue_store');
+
+        $hits = [];
+        foreach ($this->myPending() as $record) {
+            // Own drafts, but honour the page ACL anyway: rights may have been
+            // withdrawn between submitting the change and searching for it.
+            if (auth_quickaclcheck($record['target']) < AUTH_READ) continue;
+
+            $text = $store->getContent($record['id']);
+            $haystack = $text . "\n" . $record['target'] . "\n" . $record['summary'];
+            $pos = stripos($haystack, $query);
+            if ($pos === false) continue;
+
+            $hits[] = [
+                'id'      => $record['id'],
+                'target'  => $record['target'],
+                'summary' => $record['summary'],
+                'created' => $record['created'],
+                'snippet' => $this->snippet($text, $query),
+            ];
+        }
+
+        return $hits;
+    }
+
+    /**
      * Get the current state of one of your submitted changes, including the
      * reviewer's comment when it was rejected.
      *
@@ -148,6 +199,30 @@ class remote_plugin_reviewqueue extends RemotePlugin
         /** @var helper_plugin_reviewqueue_store $store */
         $store = $this->loadHelper('reviewqueue_store');
         return $store->getContent($id);
+    }
+
+    /**
+     * Context around the first occurrence of $query in $text, so a caller can
+     * judge relevance without fetching the whole draft.
+     *
+     * @param string $text
+     * @param string $query
+     * @param int $context characters to include on either side
+     * @return string
+     */
+    protected function snippet($text, $query, $context = 80)
+    {
+        $pos = stripos($text, $query);
+        if ($pos === false) return PhpString::substr($text, 0, $context * 2);
+
+        $start = max(0, $pos - $context);
+        $length = PhpString::strlen($query) + ($context * 2);
+        $snippet = PhpString::substr($text, $start, $length);
+
+        if ($start > 0) $snippet = '…' . $snippet;
+        if ($start + $length < PhpString::strlen($text)) $snippet .= '…';
+
+        return $snippet;
     }
 
     /**

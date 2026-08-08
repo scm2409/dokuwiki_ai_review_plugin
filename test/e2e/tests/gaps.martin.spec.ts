@@ -131,6 +131,46 @@ test('a change whose page moved on is marked conflicted instead of overwriting',
   );
 });
 
+test('once approved, a draft leaves the pending search and enters the wiki search', async ({
+  page,
+  request,
+}) => {
+  // The handover point: while queued, only searchMyPending finds the text;
+  // after approval, the normal wiki search does, and the pending search must
+  // no longer report it as outstanding work.
+  const pageId = `handover${Date.now()}`;
+  const marker = `bilby${Date.now()}`;
+  const rqid = await queueAsKail(request, pageId, `An article about ${marker} burrows.`);
+
+  const pendingSearch = (query: string) =>
+    request
+      .post('/lib/exe/jsonrpc.php', {
+        headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
+        data: {
+          jsonrpc: '2.0',
+          method: 'plugin.reviewqueue.searchMyPending',
+          params: { query },
+          id: 1,
+        },
+      })
+      .then((r) => r.json());
+
+  expect((await pendingSearch(marker)).result).toHaveLength(1);
+
+  await approve(page, rqid);
+  await expect(page.locator('#dokuwiki__content')).toContainText(`Change #${rqid} approved`);
+
+  // No longer outstanding...
+  expect((await pendingSearch(marker)).result).toEqual([]);
+
+  // ...and now findable the normal way.
+  const live = await request.post('/lib/exe/jsonrpc.php', {
+    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
+    data: { jsonrpc: '2.0', method: 'core.searchPages', params: { query: marker }, id: 1 },
+  });
+  expect((await live.json()).result.map((h: any) => h.id)).toContain(pageId);
+});
+
 test('two stacked changes can be approved one after the other', async ({ page, request }) => {
   const pageId = `sequential${Date.now()}`;
   await saveAsMartin(request, pageId, 'base');

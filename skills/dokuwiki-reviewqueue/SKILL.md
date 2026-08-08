@@ -63,11 +63,26 @@ If you see that, you skipped `getPageToEdit`. Recover by calling
 `getPageToEdit`, folding both intents into one text, and asking the reviewer (via
 the user) to reject the superfluous change — you cannot withdraw it yourself.
 
+## Searching: the wiki search cannot see your drafts
+
+`core.searchPages` only matches **published** text. Anything you have written
+that is still awaiting review is invisible to it — including to you.
+
+So whenever you search in order to decide *what to write*, search both:
+
+1. `core.searchPages` — what is actually on the wiki.
+2. `searchMyPending` — what you have already written but that is not approved yet.
+
+Skip the second and you will conclude a topic is uncovered, write it again on
+another page, and end up with two competing drafts. `getPageToEdit` cannot save
+you here: it only helps once you have picked the page.
+
 ## Checking on your work
 
 | Purpose | Tool |
 |---|---|
 | List everything of yours still awaiting review | `listMyPending` |
+| Full-text search across your unreviewed drafts | `searchMyPending` |
 | State of one change, plus the reviewer's reason if rejected | `getStatus` |
 | Re-read the exact text you submitted | `getPendingText` |
 
@@ -84,9 +99,9 @@ the user) to reject the superfluous change — you cannot withdraw it yourself.
 
 ## Things that will mislead you if you forget them
 
-- **Search does not see queued changes.** `core.searchPages` only matches
-  published text. Your draft being absent from results does not mean it was lost
-  — check `listMyPending`.
+- **Search does not see queued changes.** Your draft being absent from
+  `core.searchPages` results does not mean it was lost — use `searchMyPending`
+  or `listMyPending`.
 - **Deleting a page** (saving empty text) is queued like any other change. The
   page stays visible until a human approves the deletion.
 - **You cannot approve anything**, including your own changes. Self-approval is

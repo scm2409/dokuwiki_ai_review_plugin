@@ -14,7 +14,7 @@ von `kail`:
 | Was `kail` tut | Was er bekommt |
 |---|---|
 | `core.getPage` auf die Seite | den **Live-Text**, nicht seinen Entwurf, ohne jeden Hinweis |
-| `core.searchPages` nach einem Wort aus seinem Entwurf | **kein Treffer** |
+| `core.searchPages` nach einem Wort aus seinem Entwurf | **kein Treffer** (auch nicht für ihn selbst) |
 | `core.searchPages` nach einem Wort aus dem Live-Text | normaler Treffer |
 | Seite im Browser öffnen | Live-Fassung, kein Banner (der ist nur für Reviewer) |
 
@@ -46,6 +46,16 @@ Stattdessen bekommt der Autor **explizite Werkzeuge und explizite Warnungen**:
 2. **`listMyPending()` / `getStatus($id)` / `getPendingText($id)`** — eigene offene
    Änderungen auflisten, Status samt Ablehnungsgrund abfragen, eingereichten Text
    zurücklesen.
+2a. **`searchMyPending($query)`** — Volltextsuche über die eigenen offenen Entwürfe.
+   Schließt die verbleibende Lücke, die `getPageToEdit` **nicht** abdeckt: dieses
+   greift erst, wenn die Zielseite schon feststeht. Wer inhaltlich sucht („habe ich
+   zu Thema X schon etwas geschrieben?"), bekommt von `core.searchPages`
+   ausschließlich veröffentlichten Text, hält das Thema für unbearbeitet und legt
+   eine zweite Fassung auf einer **anderen** Seite an — ein Fall, den kein
+   seitenbezogenes Werkzeug abfangen kann. Einfache Substring-Suche über Text,
+   Seiten-ID und Zusammenfassung mit Trefferkontext; bei der erwarteten Menge
+   ([ADR-0002](adr-0002-file-store.md)) ist ein linearer Scan ausreichend, ein
+   eigener Suchindex wäre unangemessen.
 3. **Warnung beim Stapeln.** Reicht jemand eine Änderung für eine Seite ein, für die er
    bereits offene Änderungen hat, nennt die Rückmeldung diese explizit beim Namen
    („you already have unreviewed change(s) #1, #2 on this page … the earlier work will be

@@ -120,6 +120,43 @@ test('listMyPending and getStatus report the author own changes', async ({ reque
   expect(text.result).toBe('some draft');
 });
 
+test('searchMyPending finds drafts that the wiki search cannot see', async ({ request }) => {
+  // The gap getPageToEdit cannot close: searching by topic rather than by
+  // page. Without this the author concludes a topic is uncovered and writes
+  // a second version on a different page.
+  const pageId = `vissearch${Date.now()}`;
+  const marker = `quokka${Date.now()}`;
+  await queue(request, pageId, `A draft discussing ${marker} behaviour at length.`, 'draft summary');
+
+  // The published index knows nothing about it.
+  const liveHits = await rpc(request, tokens.kail, 'core.searchPages', { query: marker });
+  expect(liveHits.result).toEqual([]);
+
+  const mine = await rpc(request, tokens.kail, 'plugin.reviewqueue.searchMyPending', {
+    query: marker,
+  });
+  expect(mine.result).toHaveLength(1);
+  expect(mine.result[0].target).toBe(pageId);
+  expect(mine.result[0].snippet).toContain(marker);
+
+  // Matching is case-insensitive and also covers the summary.
+  const upper = await rpc(request, tokens.kail, 'plugin.reviewqueue.searchMyPending', {
+    query: marker.toUpperCase(),
+  });
+  expect(upper.result).toHaveLength(1);
+
+  const bySummary = await rpc(request, tokens.kail, 'plugin.reviewqueue.searchMyPending', {
+    query: 'draft summary',
+  });
+  expect(bySummary.result.map((h: any) => h.target)).toContain(pageId);
+
+  // A term that appears nowhere returns nothing rather than everything.
+  const none = await rpc(request, tokens.kail, 'plugin.reviewqueue.searchMyPending', {
+    query: 'definitelynotpresentanywhere',
+  });
+  expect(none.result).toEqual([]);
+});
+
 test('queuing a change does not strand the page lock against other editors', async ({
   request,
 }) => {

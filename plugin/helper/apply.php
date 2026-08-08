@@ -98,5 +98,12 @@ class helper_plugin_reviewqueue_apply extends Plugin
             helper_plugin_reviewqueue_policy::endApply();
             $INPUT->server->set('REMOTE_USER', $originalUser);
         }
+
+        // saveWikiText() does not touch the search index - ApiCore::savePage()
+        // calls idx_addPage() itself right after saving, and the browser path
+        // relies on the taskrunner firing on a later page view. An approval has
+        // neither, so without this the freshly published text stays unfindable
+        // until some unrelated request happens to run the indexer.
+        idx_addPage($record['target']);
     }
 }
