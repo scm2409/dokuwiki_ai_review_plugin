@@ -7,7 +7,7 @@ Statusanker über Sessions hinweg. Vor Beginn einer neuen Arbeitssitzung hier le
 | 0 | Repo-Bootstrap | ✅ erledigt | `main` | git init, Grundgerüst, CLAUDE.md |
 | 1 | Recherche dokumentieren | ✅ erledigt | `main` | existing-plugins.md, kaos-hooks.md |
 | 2 | ADRs + Spec | ✅ erledigt | `main` | ADR-0001..0003, spec.md, testing/strategy.md |
-| 3 | Testumgebung (Podman + Playwright) | ⏳ offen | — | |
+| 3 | Testumgebung (Podman + Playwright) | ✅ erledigt | `main` | Container läuft, 8/8 Smoke-Tests grün, MCP-Handshake real verifiziert |
 | 4 | Plugin-Kern (Policy, Store, Save-Interception) | ⏳ offen | — | |
 | 5 | Review-UI (Admin-Queue, Diff, Banner) | ⏳ offen | — | |
 | 6 | 3-Wege-Merge / Konflikte | ⏳ offen | — | |
