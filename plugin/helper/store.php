@@ -28,6 +28,14 @@ class helper_plugin_reviewqueue_store extends Plugin
         $this->ensureDirs();
         $id = $this->nextId();
 
+        // io_lock() gives up after 3 seconds and treats the lock as stale, so
+        // under pathological load two callers could in principle be handed the
+        // same id. Refuse rather than silently overwrite somebody else's queued
+        // change - losing a change quietly is exactly what fail-closed forbids.
+        if (file_exists($this->queueFile($id, 'json'))) {
+            throw new \RuntimeException("reviewqueue: change id #$id is already taken");
+        }
+
         $record = $meta + [
             'reviewer'    => null,
             'reviewedAt'  => null,
