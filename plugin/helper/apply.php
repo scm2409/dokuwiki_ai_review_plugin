@@ -47,6 +47,8 @@ class helper_plugin_reviewqueue_apply extends Plugin
             }
 
             $this->replaySave($record, $content, $this->summaryFor($record, $reviewer));
+        } elseif ($record['type'] === 'media') {
+            $this->replayMediaSave($record);
         }
 
         $record['state']       = 'approved';
@@ -167,11 +169,65 @@ class helper_plugin_reviewqueue_apply extends Plugin
             $INPUT->server->set('REMOTE_USER', $originalUser);
         }
 
+        $this->reindex($record['target']);
+    }
+
+    /**
+     * Publish a queued upload by handing the stored copy back to DokuWiki's
+     * own media_save(), so permission checks, mime validation, overwrite
+     * handling and the media changelog all behave exactly as for a direct
+     * upload - attributed to the original uploader.
+     *
+     * 'copy' rather than 'rename' as the move function: the queued file stays
+     * put so it can be archived alongside the change record.
+     *
+     * @param array $record
+     * @throws \RuntimeException when the upload cannot be published
+     */
+    protected function replayMediaSave(array $record)
+    {
+        global $INPUT;
+
+        /** @var helper_plugin_reviewqueue_store $store */
+        $store = $this->loadHelper('reviewqueue_store');
+
+        $path = $store->mediaPath($record['id']);
+        if ($path === null) {
+            throw new \RuntimeException("reviewqueue: stored upload for #{$record['id']} is missing");
+        }
+
+        $originalUser = $INPUT->server->str('REMOTE_USER');
+        $INPUT->server->set('REMOTE_USER', $record['author']);
+        helper_plugin_reviewqueue_policy::beginApply();
+        try {
+            $res = media_save(
+                ['name' => $path, 'mime' => $record['mime'] ?? null],
+                $record['target'],
+                !empty($record['overwrite']),
+                AUTH_UPLOAD,
+                'copy'
+            );
+        } finally {
+            helper_plugin_reviewqueue_policy::endApply();
+            $INPUT->server->set('REMOTE_USER', $originalUser);
+        }
+
+        // media_save() reports failure as an [message, level] pair.
+        if (is_array($res)) {
+            throw new \RuntimeException('reviewqueue: media_save failed: ' . $res[0]);
+        }
+    }
+
+    /**
+     * @param string $page
+     */
+    protected function reindex($page)
+    {
         // saveWikiText() does not touch the search index - ApiCore::savePage()
         // calls idx_addPage() itself right after saving, and the browser path
         // relies on the taskrunner firing on a later page view. An approval has
         // neither, so without this the freshly published text stays unfindable
         // until some unrelated request happens to run the indexer.
-        idx_addPage($record['target']);
+        idx_addPage($page);
     }
 }

@@ -161,6 +161,8 @@ class admin_plugin_reviewqueue extends AdminPlugin
 
         if ($record['type'] === 'page') {
             $this->renderDiff($record);
+        } else {
+            $this->renderMedia($record);
         }
 
         if ($record['state'] === 'conflicted') {
@@ -212,6 +214,28 @@ class admin_plugin_reviewqueue extends AdminPlugin
         $form->addButton('rqaction', $this->getLang('btn_resolve'))->attr('value', 'resolve');
         $form->addButton('rqaction', $this->getLang('btn_reject'))->attr('value', 'reject');
         echo $form->toHTML();
+    }
+
+    /**
+     * There is no meaningful diff for a binary, so describe the upload
+     * instead: what it would land on, how big it is, and whether it would
+     * replace something that already exists.
+     */
+    protected function renderMedia(array $record)
+    {
+        $path = $this->store->mediaPath($record['id']);
+        $size = $path ? filesize($path) : 0;
+
+        echo '<p class="reviewqueue-media">' . sprintf(
+            hsc($this->getLang('media_info')),
+            hsc($record['mime'] ?? ''),
+            hsc(filesize_h($size))
+        ) . '</p>';
+
+        if (!empty($record['overwrite']) && media_exists($record['target'])) {
+            echo '<p class="reviewqueue-conflict">' .
+                hsc($this->getLang('media_overwrite')) . '</p>';
+        }
     }
 
     protected function renderDiff(array $record)

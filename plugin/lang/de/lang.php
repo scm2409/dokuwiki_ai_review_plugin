@@ -31,3 +31,6 @@ $lang['resolve_label'] = 'Aufgelöster Seitentext (Konfliktmarker entfernen und 
 $lang['btn_resolve']   = 'Aufgelösten Text veröffentlichen';
 $lang['markers_left']  = 'Der Text enthält noch Konfliktmarker. Bitte entfernen und nur die gewünschte Fassung stehen lassen.';
 $lang['no_base']       = 'Die Fassung, gegen die diese Änderung geschrieben wurde, ist nicht mehr verfügbar — ein automatischer Merge ist daher nicht möglich. Unten steht der vorgeschlagene Text für sich; bitte selbst mit der aktuellen Seite vergleichen.';
+
+$lang['media_info']      = 'Hochgeladene Datei: %s, %s.';
+$lang['media_overwrite'] = 'Dieser Upload würde eine bereits vorhandene Datei ersetzen.';

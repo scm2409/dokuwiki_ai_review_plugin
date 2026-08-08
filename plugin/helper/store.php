@@ -107,6 +107,37 @@ class helper_plugin_reviewqueue_store extends Plugin
     }
 
     /**
+     * Take a copy of an uploaded file into the queue.
+     *
+     * Deliberately not routed through io_saveFile()/io_readFile() like the
+     * page text is: io_readFile() runs cleanText() on what it reads, which
+     * normalises line endings and would corrupt any binary. Media is copied
+     * byte for byte instead.
+     *
+     * @param int $id change id
+     * @param string $tmpFile path of the uploaded temp file
+     * @throws \RuntimeException on any storage failure
+     */
+    public function putMedia($id, $tmpFile)
+    {
+        $this->ensureDirs();
+        if (!@copy($tmpFile, $this->queueFile($id, 'media'))) {
+            throw new \RuntimeException("reviewqueue: failed to store media for change #$id");
+        }
+    }
+
+    /**
+     * Path of the stored upload for a change, or null if there is none.
+     *
+     * @param int $id
+     * @return string|null
+     */
+    public function mediaPath($id)
+    {
+        return $this->fileFor($id, 'media');
+    }
+
+    /**
      * Overwrite a pending change's metadata, e.g. when transitioning state.
      * Content is immutable once queued (a re-edit is a new pending change).
      *
@@ -135,7 +166,7 @@ class helper_plugin_reviewqueue_store extends Plugin
     public function archive($id)
     {
         $this->ensureDirs();
-        foreach (['json', 'content', 'base'] as $ext) {
+        foreach (['json', 'content', 'base', 'media'] as $ext) {
             $from = $this->queueFile($id, $ext);
             if (!file_exists($from)) continue;
             $to = $this->archiveFile($id, $ext);

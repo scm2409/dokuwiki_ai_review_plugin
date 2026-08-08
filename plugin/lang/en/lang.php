@@ -31,3 +31,6 @@ $lang['resolve_label'] = 'Resolved page text (remove the conflict markers and le
 $lang['btn_resolve']   = 'Publish resolved text';
 $lang['markers_left']  = 'The text still contains conflict markers. Remove them and keep only the wording the page should have.';
 $lang['no_base']       = 'The revision this change was written against is no longer available, so it cannot be merged automatically. Below is the proposed text on its own - compare it against the current page yourself.';
+
+$lang['media_info']      = 'Uploaded file: %s, %s.';
+$lang['media_overwrite'] = 'This upload would replace a file that already exists.';
