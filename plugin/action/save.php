@@ -93,7 +93,7 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         ]);
 
         try {
-            $id = $store->enqueue($meta, $data['newContent']);
+            $id = $store->enqueue($meta, $data['newContent'], $data['oldContent']);
             $failure = null;
         } catch (\Throwable $e) {
             $id = null;

@@ -54,7 +54,12 @@ class admin_plugin_reviewqueue extends AdminPlugin
         $record = $this->store->get($id);
         $user = $INPUT->server->str('REMOTE_USER');
 
-        if (!$record || $record['state'] !== 'pending') {
+        // 'resolve' is by definition the follow-up to a failed approval, so it
+        // acts on a conflicted change; the others act on an open one. Either
+        // way a change that has already been decided is off limits, which also
+        // makes a double-submitted form harmless.
+        $allowed = $rqaction === 'resolve' ? ['conflicted'] : ['pending', 'conflicted'];
+        if (!$record || !in_array($record['state'], $allowed, true)) {
             msg($this->getLang('not_found'), -1);
             return;
         }
@@ -77,8 +82,22 @@ class admin_plugin_reviewqueue extends AdminPlugin
             } elseif ($rqaction === 'reject') {
                 $apply->reject($record, $user, $INPUT->str('rqcomment'));
                 msg(sprintf($this->getLang('rejected'), $id), 1);
+            } elseif ($rqaction === 'resolve') {
+                $text = $INPUT->post->str('rqtext');
+                if (str_contains($text, helper_plugin_reviewqueue_merge::MARK_SPLIT)) {
+                    // Publishing conflict markers into the wiki is never what
+                    // the reviewer meant; almost always they missed a block.
+                    msg($this->getLang('markers_left'), -1);
+                    return;
+                }
+                $apply->resolve($record, $user, $text);
+                msg(sprintf($this->getLang('resolved'), $id), 1);
             }
         } catch (\Throwable $e) {
+            // The reviewer gets a plain message, but swallowing the cause
+            // outright makes these failures undiagnosable - hand it to
+            // DokuWiki's error log the way core does.
+            \dokuwiki\ErrorHandler::logException($e);
             msg($this->getLang('apply_failed'), -1);
         }
 
@@ -140,19 +159,59 @@ class admin_plugin_reviewqueue extends AdminPlugin
             dformat($record['created'])
         ) . '</p>';
 
-        if ($record['state'] === 'conflicted') {
-            echo '<p class="reviewqueue-conflict">' . hsc($this->getLang('conflict_notice')) . '</p>';
-        }
-
         if ($record['type'] === 'page') {
             $this->renderDiff($record);
         }
 
-        if ($record['state'] === 'pending') {
+        if ($record['state'] === 'conflicted') {
+            $this->renderConflict($record);
+        } else {
             $this->renderForm($record);
         }
 
         echo '</div>';
+    }
+
+    /**
+     * A conflicted change cannot be published as-is, so instead of the plain
+     * approve button the reviewer gets the merged text with conflict markers
+     * to edit down to what the page should actually say.
+     *
+     * The merge is recomputed here rather than stored at conflict time: the
+     * live page may have changed again since, and resolving against a stale
+     * merge would quietly undo whatever happened in between.
+     */
+    protected function renderConflict(array $record)
+    {
+        echo '<p class="reviewqueue-conflict">' . hsc($this->getLang('conflict_notice')) . '</p>';
+
+        /** @var helper_plugin_reviewqueue_merge $merge */
+        $merge = $this->loadHelper('reviewqueue_merge');
+
+        $base = $merge->baseText($record);
+        $live = rawWiki($record['target']);
+        $pending = $this->store->getContent($record['id']);
+
+        if ($base === null) {
+            // No usable base revision, so a three-way merge is impossible.
+            // Offer the proposed text on its own and say so plainly.
+            echo '<p class="reviewqueue-conflict">' . hsc($this->getLang('no_base')) . '</p>';
+            $text = $pending;
+        } else {
+            $text = $merge->merge($base, $live, $pending)['text'];
+        }
+
+        $form = new Form(['method' => 'POST']);
+        $form->setHiddenField('do', 'admin');
+        $form->setHiddenField('page', 'reviewqueue');
+        $form->setHiddenField('rqid', $record['id']);
+        $form->addTextarea('rqtext', $this->getLang('resolve_label'))
+             ->val($text)
+             ->attr('rows', '20')
+             ->addClass('reviewqueue-resolve');
+        $form->addButton('rqaction', $this->getLang('btn_resolve'))->attr('value', 'resolve');
+        $form->addButton('rqaction', $this->getLang('btn_reject'))->attr('value', 'reject');
+        echo $form->toHTML();
     }
 
     protected function renderDiff(array $record)

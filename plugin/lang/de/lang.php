@@ -25,3 +25,9 @@ $lang['banner']      = 'Für diese Seite liegen %d offene Änderung(en) zur Prü
 $lang['banner_link'] = 'Review-Warteschlange öffnen';
 
 $lang['stacked_notice'] = 'Vorsicht: Für diese Seite liegen %d ungeprüfte Änderungen vor (#%s), die jeweils auf der Live-Fassung basieren und nicht aufeinander. Werden mehrere freigegeben, überschreiben die späteren die früheren. Bitte einzeln prüfen und die nicht gewünschten ablehnen.';
+
+$lang['resolved']      = 'Änderung #%d aufgelöst und veröffentlicht.';
+$lang['resolve_label'] = 'Aufgelöster Seitentext (Konfliktmarker entfernen und stehen lassen, was auf der Seite stehen soll)';
+$lang['btn_resolve']   = 'Aufgelösten Text veröffentlichen';
+$lang['markers_left']  = 'Der Text enthält noch Konfliktmarker. Bitte entfernen und nur die gewünschte Fassung stehen lassen.';
+$lang['no_base']       = 'Die Fassung, gegen die diese Änderung geschrieben wurde, ist nicht mehr verfügbar — ein automatischer Merge ist daher nicht möglich. Unten steht der vorgeschlagene Text für sich; bitte selbst mit der aktuellen Seite vergleichen.';

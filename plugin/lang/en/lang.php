@@ -25,3 +25,9 @@ $lang['banner']      = 'There are %d pending change(s) on this page waiting for 
 $lang['banner_link'] = 'Open the review queue';
 
 $lang['stacked_notice'] = 'Careful: there are %d unreviewed changes for this page (#%s), each based on the live revision rather than on each other. Approving more than one will overwrite the earlier ones. Review them one at a time and reject the ones you do not want.';
+
+$lang['resolved']      = 'Change #%d resolved and published.';
+$lang['resolve_label'] = 'Resolved page text (remove the conflict markers and leave what the page should say)';
+$lang['btn_resolve']   = 'Publish resolved text';
+$lang['markers_left']  = 'The text still contains conflict markers. Remove them and keep only the wording the page should have.';
+$lang['no_base']       = 'The revision this change was written against is no longer available, so it cannot be merged automatically. Below is the proposed text on its own - compare it against the current page yourself.';

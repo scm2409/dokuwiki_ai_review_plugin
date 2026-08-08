@@ -20,10 +20,12 @@ class helper_plugin_reviewqueue_store extends Plugin
      *                     baseHash, origin - see docs/design/spec.md for
      *                     the full field list
      * @param string $content new page text (empty string = deletion)
+     * @param string $base the page text the change was written against, kept
+     *                     for the three-way merge on approval
      * @return int the new pending change id
      * @throws \RuntimeException on any storage failure
      */
-    public function enqueue(array $meta, $content)
+    public function enqueue(array $meta, $content, $base = '')
     {
         $this->ensureDirs();
         $id = $this->nextId();
@@ -51,10 +53,18 @@ class helper_plugin_reviewqueue_store extends Plugin
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         ));
         $ok = $ok && io_saveFile($this->queueFile($id, 'content'), $content);
+        // The base text is stored rather than read back from the attic on
+        // demand: DokuWiki revisions are second-granular, so when a human
+        // saves in the same second as the queued change was based on, the
+        // attic entry for that timestamp is overwritten and the original is
+        // simply gone. That is exactly the busy-wiki situation where an
+        // automatic merge is most valuable.
+        $ok = $ok && io_saveFile($this->queueFile($id, 'base'), $base);
 
         if (!$ok) {
             @unlink($this->queueFile($id, 'json'));
             @unlink($this->queueFile($id, 'content'));
+            @unlink($this->queueFile($id, 'base'));
             throw new \RuntimeException("reviewqueue: failed to persist pending change #$id");
         }
 
@@ -81,6 +91,19 @@ class helper_plugin_reviewqueue_store extends Plugin
     {
         $file = $this->fileFor($id, 'content');
         return $file ? io_readFile($file) : '';
+    }
+
+    /**
+     * The page text a change was written against, or null when it was not
+     * recorded (changes queued before base texts were stored).
+     *
+     * @param int $id
+     * @return string|null
+     */
+    public function getBase($id)
+    {
+        $file = $this->fileFor($id, 'base');
+        return $file ? io_readFile($file) : null;
     }
 
     /**
@@ -112,7 +135,7 @@ class helper_plugin_reviewqueue_store extends Plugin
     public function archive($id)
     {
         $this->ensureDirs();
-        foreach (['json', 'content'] as $ext) {
+        foreach (['json', 'content', 'base'] as $ext) {
             $from = $this->queueFile($id, $ext);
             if (!file_exists($from)) continue;
             $to = $this->archiveFile($id, $ext);

@@ -113,3 +113,29 @@ in derselben Datei — dieselben Klassen, die DokuWikis eigene Revisions-/Diff-A
 - `_test/phpunit.xml` sammelt automatisch `../lib/plugins/*/_test/` ein — falls PHPUnit
   später ergänzt wird (siehe Nicht-Ziel in der Roadmap), braucht unser Plugin dafür nur
   ein `_test/`-Verzeichnis, keine weitere Konfiguration.
+
+## Bug in Kaos: `Diff3::mergedOutput()` ist unbenutzbar
+
+Beim Umsetzen des 3-Wege-Merges (Phase 6) gefunden. `Diff3::mergedOutput()`
+(`inc/DifferenceEngine.php:1357`) greift im Konfliktzweig direkt auf
+`$edit->final1` / `$edit->final2` zu, doch diese Properties sind auf `_Diff3_Op`
+als `protected` deklariert (Zeile 1458 ff.). Sobald tatsächlich ein Konflikt
+auftritt, endet der Aufruf in einem Fatal Error:
+
+```
+Error: Cannot access protected property _Diff3_Op::$final1
+```
+
+Bei konfliktfreien Merges passiert das nicht, weil dort nur das öffentliche
+`merged()` verwendet wird — der Automerge-Pfad funktioniert also.
+
+Der Core ruft `mergedOutput()` nirgends auf; `Diff3` fehlt sogar in der
+Autoload-Map (`inc/load.php:45-47` listet nur `Diff`, `UnifiedDiffFormatter`
+und `TableDiffFormatter`), weshalb die Klasse ohne explizites
+`require_once(DOKU_INC . 'inc/DifferenceEngine.php')` gar nicht erst geladen
+wird. Deshalb ist der Defekt upstream nie aufgefallen.
+
+Umgehung im Plugin (`helper/merge.php`): die Edit-Liste selbst durchlaufen
+(`$diff3->_edits`, `isConflict()` und `merged()` sind öffentlich zugänglich)
+und die beiden Konfliktseiten per Reflection lesen. Das bleibt auch dann
+funktionsfähig, wenn eine spätere DokuWiki-Version die Sichtbarkeit korrigiert.
