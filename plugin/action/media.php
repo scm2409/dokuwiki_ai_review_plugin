@@ -58,7 +58,15 @@ class action_plugin_reviewqueue_media extends ActionPlugin
             ], '');
             // Copy the upload before returning: DokuWiki cleans the temp file
             // up once this request ends.
-            $store->putMedia($id, $tmpFile);
+            try {
+                $store->putMedia($id, $tmpFile);
+            } catch (\Throwable $e) {
+                // The record exists but its payload does not, so it could
+                // never be published. Drop it rather than leave a change in
+                // the queue that is guaranteed to fail on approval.
+                $store->discard($id);
+                throw $e;
+            }
         } catch (\Throwable $e) {
             \dokuwiki\ErrorHandler::logException($e);
             // Fail-closed: preventDefault() above already stopped the upload,

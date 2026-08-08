@@ -35,11 +35,20 @@ data/reviewqueue/
 ├── queue/
 │   ├── <id>.json                 # Metadaten, siehe unten
 │   ├── <id>.content              # neuer Volltext der Seite (leer = Löschung)
+│   ├── <id>.base                 # Textstand, auf dem die Änderung basiert
 │   └── <id>.media                # nur bei type=media: Binärdaten des Uploads
-└── archive/
-    ├── <id>.json
-    └── <id>.content               # Content wird mitarchiviert (Nachvollziehbarkeit)
+└── archive/                      # dieselben Dateien für entschiedene Änderungen
 ```
+
+`<id>.base` wird mitgespeichert, statt den Basistext bei Bedarf aus dem Attic zu
+rekonstruieren: DokuWiki-Revisionen haben Sekundengranularität, und wenn ein
+Mensch in derselben Sekunde speichert, auf der die Änderung basiert, überschreibt
+sein Attic-Eintrag den ursprünglichen — genau in der belebten Wiki-Situation, in
+der der Automerge am wertvollsten wäre.
+
+Media-Dateien laufen **nicht** über `io_saveFile()`/`io_readFile()`, weil
+`io_readFile()` `cleanText()` anwendet und Binärdaten damit beschädigt; sie
+werden byteweise kopiert (`helper/store.php::putMedia()`).
 
 ### `<id>.json`
 
@@ -125,14 +134,18 @@ würde die Freigabe sich selbst wieder in die Queue stellen.
 $_SERVER['REMOTE_USER']` vor jeder Approve/Reject-Aktion — auch wenn der Autor zufällig
 in `reviewer_groups` wäre.
 
-### Umsetzungsstand (Phase 5)
+### Umsetzungsstand
 
-Implementiert und gegen den echten Container verifiziert: `helper/apply.php` (Schritte
-3–6, Schritt 2 aktuell nur der `clean`-Fall — Hash-Vergleich gegen `baseHash`; bei
-Abweichung wird `state=conflicted` gesetzt statt automatisch zu mergen), `admin.php`
-(Queue-Liste, Diff via `Diff`/`TableDiffFormatter`, Approve/Reject-Formular),
-`action/banner.php`. Der `Diff3`-Automerge-Versuch für den `conflicted`-Fall sowie ein
-Resolution-Editor dafür kommen in Phase 6.
+Vollständig umgesetzt und gegen den laufenden Container verifiziert. Der
+3-Wege-Merge (`helper/merge.php`) versucht bei abweichendem `baseHash` einen
+`Diff3`-Merge; gelingt er konfliktfrei, wird `mergeResult = auto-merged` gesetzt,
+sonst `state = conflicted` mit manueller Auflösung im Admin-Formular
+(`mergeResult = manual`).
+
+Zu beachten: **`Diff3::mergedOutput()` ist in Kaos defekt** (greift im
+Konfliktzweig auf `protected` Properties zu, siehe
+[`docs/research/kaos-hooks.md`](../research/kaos-hooks.md)). `helper/merge.php`
+umgeht das, indem es die Edit-Liste selbst durchläuft.
 
 ## Fail-closed (Leitprinzip, siehe `CLAUDE.md`)
 

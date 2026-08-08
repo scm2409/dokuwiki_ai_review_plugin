@@ -133,9 +133,11 @@ class remote_plugin_reviewqueue extends RemotePlugin
 
         $hits = [];
         foreach ($this->myPending() as $record) {
-            // Own drafts, but honour the page ACL anyway: rights may have been
-            // withdrawn between submitting the change and searching for it.
-            if (auth_quickaclcheck($record['target']) < AUTH_READ) continue;
+            // Own drafts, but honour the target's ACL anyway: rights may have
+            // been withdrawn between submitting the change and searching for
+            // it. Media needs upload rights rather than read rights.
+            $need = ($record['type'] ?? 'page') === 'media' ? AUTH_UPLOAD : AUTH_READ;
+            if (auth_quickaclcheck($record['target']) < $need) continue;
 
             $text = $store->getContent($record['id']);
             $haystack = $text . "\n" . $record['target'] . "\n" . $record['summary'];

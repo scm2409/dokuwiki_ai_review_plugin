@@ -18,8 +18,13 @@ durchgehen und verstecken nur unfreigegebene Revisionen vor Lesern — und sind 
 
 ## Status
 
-Projekt befindet sich in der Umsetzung. Siehe [`docs/roadmap.md`](docs/roadmap.md)
-für den aktuellen Phasenstand.
+Funktionsfähig und vollständig getestet gegen DokuWiki 2024-02-06b: Seiten
+anlegen/ändern/löschen und Media-Uploads laufen über die Queue, mit
+3-Wege-Merge, Konfliktauflösung, Admin-Oberfläche und MCP-Werkzeugen für den
+Agenten. 46 End-to-End-Tests laufen gegen eine echte Installation im Container.
+
+Installation und Betrieb: [`docs/usage.md`](docs/usage.md).
+Phasenstand: [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Dokumentation
 
@@ -30,15 +35,18 @@ für den aktuellen Phasenstand.
 - [`docs/design/`](docs/design/) — Architekturentscheidungen (ADRs)
 - [`docs/testing/strategy.md`](docs/testing/strategy.md) — Testkonzept und
   Szenarienmatrix
+- [`docs/usage.md`](docs/usage.md) — Installation, Betrieb, Backup, Sicherheit
 - [`docs/roadmap.md`](docs/roadmap.md) — Phasenplan und Status
+- [`skills/`](skills/) — Agent-Skill, der einer KI den Review-Workflow erklärt
 
 ## Verzeichnisstruktur
 
 ```
 plugin/     DokuWiki-Plugin-Quellcode (wird nach lib/plugins/reviewqueue/ installiert)
+skills/     Agent-Skill für den Umgang mit der Review-Queue über MCP
 test/env/   Podman-Testumgebung mit DokuWiki 2024-02-06b
 test/e2e/   Playwright-End-to-End-Tests
-docs/       Recherche, Entscheidungen, Spezifikation, Testkonzept
+docs/       Recherche, Entscheidungen, Spezifikation, Testkonzept, Bedienung
 ```
 
 ## Entwicklung

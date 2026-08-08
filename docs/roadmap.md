@@ -15,8 +15,13 @@ Statusanker über Sessions hinweg. Vor Beginn einer neuen Arbeitssitzung hier le
 | 8 | remote.php + MCP-Verifikation | ✅ erledigt | `main` | vorgezogen wegen ADR-0004; 4 MCP-Tools live verifiziert |
 | 9 | Härtung, Security-Review, Doku | ✅ erledigt | `main` | ACL-Lücke geschlossen, CLI, usage.md, 46 Tests |
 
-Details je Phase siehe der freigegebene Plan unter
+Alle geplanten Phasen sind abgeschlossen. Der ursprüngliche Plan liegt unter
 `/home/martin/.claude/plans/ber-neues-projekt-starten-atomic-feigenbaum.md`.
+
+Reviews: [`design/code-review.md`](design/code-review.md) (Zwischenstand),
+[`design/final-review.md`](design/final-review.md) (Abschluss),
+[`testing/coverage-review.md`](testing/coverage-review.md) (Testabdeckung).
+Was bewusst offen blieb, steht im Abschluss-Review.
 
 ## Entschiedene Fragen
 

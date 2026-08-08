@@ -44,9 +44,29 @@ besonders unangenehm waren drei davon:
 belegt — dass die Review-Pflicht rein an der Konfiguration hängt und es keine
 versteckte Sonderbehandlung des Namens `kail` gibt.
 
-## Nicht behoben (bewusst)
+## Nachtrag nach Abschluss von Phase 6, 7 und 9
 
-- Szenario 4 und 10 betreffen Phase 6/7 und sind noch nicht implementiert.
+Die zum Zeitpunkt des ersten Reviews noch offenen Szenarien sind inzwischen
+implementiert **und** getestet:
+
+| # | Szenario | Test |
+|---|---|---|
+| 4 | Media-Upload → Freigabe | `media.martin.spec.ts` — inkl. sha256-Vergleich der ausgelieferten Datei gegen das Original, damit eine Beschädigung von Binärdaten nicht stillschweigend durchgeht |
+| 8 | `martin` lädt Medien hoch | `media.martin.spec.ts` |
+| 10 | Automerge disjunkter Änderungen | `merge.martin.spec.ts` |
+| 11 | Konflikt → manuelle Auflösung | `merge.martin.spec.ts` — inkl. Ablehnung von Text, der noch Konfliktmarker enthält |
+| — | ACL-Isolation (Befund A aus dem Code-Review) | `acl.martin.spec.ts` — mit echtem, restriktivem Namespace statt der freizügigen Test-ACL |
+
+Zusätzlich beim Abschlussreview zwei Tests nachgeschärft, die falsch-positiv
+bestehen konnten:
+
+- „kail sieht die Admin-Queue nicht" hätte auch bei **leerer** Queue bestanden.
+  Der Test legt jetzt erst eine Änderung mit eindeutigem Markertext an.
+- Der CSRF-Test prüfte nur, dass die Seite unverändert ist — das wäre auch bei
+  einem aus ganz anderen Gründen fehlgeschlagenen Approve der Fall. Er prüft
+  jetzt zusätzlich, dass die Änderung noch `pending` ist.
+
+## Nicht behoben (bewusst)
 - Szenario 8 „Section-Edit" ist nur indirekt abgedeckt: `COMMON_WIKIPAGE_SAVE`
   bekommt laut [`kaos-hooks.md`](../research/kaos-hooks.md) immer den
   vollständigen Seitentext, Section-Edits sind daher kein Sonderfall im

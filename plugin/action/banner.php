@@ -57,11 +57,17 @@ class action_plugin_reviewqueue_banner extends ActionPlugin
         if (!$policy->showBanner()) return;
 
         $user = $INPUT->server->str('REMOTE_USER');
-        if (!$policy->isReviewer($user)) return;
+        if (!$policy->mayReviewTarget($user, $ID)) return;
 
         /** @var helper_plugin_reviewqueue_store $store */
         $store = $this->loadHelper('reviewqueue_store');
-        $pending = $store->listChanges(['type' => 'page', 'target' => $ID, 'state' => 'pending']);
+
+        // Conflicted changes count too: they are still outstanding work on
+        // this page, and they are the ones most in need of attention.
+        $pending = array_filter(
+            $store->listChanges(['type' => 'page', 'target' => $ID]),
+            static fn($r) => in_array($r['state'], ['pending', 'conflicted'], true)
+        );
         if (!$pending) return;
 
         $url = wl($ID, ['do' => 'admin', 'page' => 'reviewqueue'], true, '&');

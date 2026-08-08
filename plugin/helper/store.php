@@ -189,6 +189,22 @@ class helper_plugin_reviewqueue_store extends Plugin
     }
 
     /**
+     * Delete a queued change outright, without archiving it.
+     *
+     * Only for changes that were never viable - e.g. an upload whose payload
+     * could not be stored. A change a human decided on belongs in the archive
+     * instead, so that the decision stays on record.
+     *
+     * @param int $id
+     */
+    public function discard($id)
+    {
+        foreach (['json', 'content', 'base', 'media'] as $ext) {
+            @unlink($this->queueFile($id, $ext));
+        }
+    }
+
+    /**
      * Archive changes that have been sitting in the queue for too long.
      *
      * @param int $days age threshold; 0 disables expiry

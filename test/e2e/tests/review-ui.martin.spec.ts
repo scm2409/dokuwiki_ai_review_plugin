@@ -121,4 +121,13 @@ test('approving without a valid CSRF token is rejected', async ({ page, request 
 
   const live = await request.get(`/doku.php?id=${pageId}`);
   expect(await live.text()).not.toContain('csrf content');
+
+  // Assert the change itself is untouched, not just that the page looks
+  // unchanged - otherwise this would also pass if the approval failed for
+  // some unrelated reason.
+  const status = await request.post('/lib/exe/jsonrpc.php', {
+    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
+    data: { jsonrpc: '2.0', method: 'plugin.reviewqueue.getStatus', params: { id: rqid }, id: 1 },
+  });
+  expect((await status.json()).result.state).toBe('pending');
 });
