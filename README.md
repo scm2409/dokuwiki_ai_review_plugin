@@ -1,4 +1,4 @@
-# dokuwiki-plugin-aireview
+# dokuwiki-plugin-reviewqueue
 
 Ein DokuWiki-Plugin, das Änderungen bestimmter Benutzer (typischerweise ein KI-Agent
 mit eigenem Wiki-Konto und MCP-Zugang) nicht direkt live schaltet, sondern in eine
@@ -35,7 +35,7 @@ für den aktuellen Phasenstand.
 ## Verzeichnisstruktur
 
 ```
-plugin/     DokuWiki-Plugin-Quellcode (wird nach lib/plugins/aireview/ installiert)
+plugin/     DokuWiki-Plugin-Quellcode (wird nach lib/plugins/reviewqueue/ installiert)
 test/env/   Podman-Testumgebung mit DokuWiki 2024-02-06b
 test/e2e/   Playwright-End-to-End-Tests
 docs/       Recherche, Entscheidungen, Spezifikation, Testkonzept

@@ -18,9 +18,10 @@ Statusanker über Sessions hinweg. Vor Beginn einer neuen Arbeitssitzung hier le
 Details je Phase siehe der freigegebene Plan unter
 `/home/martin/.claude/plans/ber-neues-projekt-starten-atomic-feigenbaum.md`.
 
-## Offene Fragen (aus dem Plan übernommen)
+## Entschiedene Fragen
 
-- Endgültiger Plugin-Basisname: `aireview` (Arbeitstitel) vs. `reviewqueue`
-  (fachlich präziser, da nicht KI-spezifisch). Entscheidung vor Phase 4 nötig.
-- `martin` als DokuWiki-Admin oder eigene `reviewer`-Gruppe? Empfehlung: eigene Gruppe,
-  im Seeding (Phase 3) entsprechend anlegen.
+- Plugin-Basisname: **`reviewqueue`** (2026-08-08 mit dem Nutzer entschieden — fachlich
+  präziser als `aireview`, da das Plugin benutzerbasiert und nicht KI-spezifisch ist).
+- `martin` bekommt eine eigene `reviewer`-Gruppe statt DokuWiki-Admin-Rechte (sauberere
+  Trennung von "darf Reviews machen" und "ist Wiki-Administrator"); wird in Phase 3 so
+  geseedet.

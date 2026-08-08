@@ -14,7 +14,7 @@ eigenem Umgang mit Seiten/Attic (`io_saveFile()`, `io_lock()`) bauen.
 
 ## Entscheidung
 
-Wir bauen einen **eigenen, dateibasierten Store** unter `data/aireview/`.
+Wir bauen einen **eigenen, dateibasierten Store** unter `data/reviewqueue/`.
 
 ## Begründung
 

@@ -20,7 +20,7 @@ Der BEFORE-Handler wirft im Remote-/CLI-Kontext (erkennbar daran, dass der Aufru
 sprechenden Nachricht und der Review-ID, z. B.:
 
 > "Change queued for review as #42 (approval required for user 'kail'). The page was
-> NOT modified. Use plugin.aireview.getStatus to check its state."
+> NOT modified. Use plugin.reviewqueue.getStatus to check its state."
 
 Zusätzlich stellt `remote.php` eigene Methoden bereit (`listMyPending`, `getStatus`,
 `getPendingChange`), die automatisch als MCP-Tools erscheinen (siehe
@@ -51,7 +51,7 @@ eingereicht") — ein Menschen an der Browser-Oberfläche soll keine rohe RPC-Ex
   in Kombination mit dem DokuWiki-Actionkontext, oder ein Flag, das `mcp.php`/`XmlRpcServer`/
   `JsonRpcServer` beim Bootstrap setzen — Detailentscheidung in Phase 4 anhand des
   tatsächlichen Request-Kontexts, den Kaos zur Verfügung stellt).
-- `plugin.aireview.*`-Methoden müssen so gestaltet sein, dass sie über
+- `plugin.reviewqueue.*`-Methoden müssen so gestaltet sein, dass sie über
   `SchemaGenerator::getTools()` sinnvolle Beschreibungen bekommen (kurze `@param`/
   `@return`-Docblocks, wie bei `ApiCore`-Methoden üblich), damit sie als MCP-Tools
   verständlich sind.

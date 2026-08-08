@@ -91,7 +91,7 @@ in derselben Datei — dieselben Klassen, die DokuWikis eigene Revisions-/Diff-A
   automatisch **aus jeder registrierten Remote-API-Methode** (Core + alle
   `RemotePlugin`-Implementierungen) ein MCP-Tool, inklusive JSON-Schema aus
   `OpenAPIGenerator::getMethodArguments()`. Das heißt: sobald unser `remote.php`
-  (Phase 8) `RemotePlugin` implementiert, tauchen `plugin.aireview.*`-Methoden
+  (Phase 8) `RemotePlugin` implementiert, tauchen `plugin.reviewqueue.*`-Methoden
   automatisch als MCP-Tools auf — **ohne** Änderung am `mcp`-Plugin.
 - Abhängigkeiten von `McpServer`/`SchemaGenerator` gegen Kaos geprüft: `ApiCall`,
   `ApiCall::getCategory()`, `::getSummary()`, `::getArgs()`, `JsonRpcServer`,

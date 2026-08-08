@@ -1,4 +1,4 @@
-# Projektkontext: dokuwiki-plugin-aireview
+# Projektkontext: dokuwiki-plugin-reviewqueue
 
 ## Was hier gebaut wird
 
@@ -16,9 +16,9 @@ Der vollständige, freigegebene Plan liegt unter
 ## Feste Entscheidungen (nicht neu diskutieren, außer der Nutzer bringt es auf)
 
 - **Hold-back-Queue**, nicht "save-then-hide". Kein Eingriff in Rendering/Cache/Suche.
-- **Dateibasierter Store** unter `data/aireview/`, keine sqlite-Plugin-Abhängigkeit.
+- **Dateibasierter Store** unter `data/reviewqueue/`, keine sqlite-Plugin-Abhängigkeit.
 - Scope: Seiten (Anlage/Änderung/Löschung) + Media-Uploads. Kein Namespace-Filter.
-- KI-Feedback über `RemoteException` + eigene `plugin.aireview.*`-Remote-Methoden
+- KI-Feedback über `RemoteException` + eigene `plugin.reviewqueue.*`-Remote-Methoden
   (werden vom `mcp`-Plugin automatisch als Tools exponiert).
 - Review-UI: Admin-Seite (Queue+Diff) + Banner auf betroffener Seite. Keine E-Mails,
   kein Syntax-Block (bewusst zurückgestellt).

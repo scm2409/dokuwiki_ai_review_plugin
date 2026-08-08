@@ -1,13 +1,9 @@
-# Spezifikation: aireview-Plugin
+# Spezifikation: reviewqueue-Plugin
 
 Konsolidiert die Entscheidungen aus [ADR-0001](adr-0001-holdback-vs-hide.md),
 [ADR-0002](adr-0002-file-store.md) und [ADR-0003](adr-0003-ki-feedback-remoteexception.md)
 zu einer verbindlichen Referenz für die Umsetzung. Verifizierte Fakten zu DokuWiki Kaos
 siehe [`docs/research/kaos-hooks.md`](../research/kaos-hooks.md).
-
-> **Namensvorbehalt:** Diese Spec verwendet durchgängig den Arbeitstitel `aireview`
-> (Plugin-Verzeichnis, Präfix `plugin.aireview.*`). Siehe offene Frage in
-> [`docs/roadmap.md`](../roadmap.md) — vor Phase 4 final zu klären.
 
 ## Zustandsmaschine
 
@@ -34,7 +30,7 @@ Reviewer-Schritt, kein Automatismus).
 ## Datenmodell
 
 ```
-data/aireview/
+data/reviewqueue/
 ├── seq                          # Textdatei mit letzter vergebener ID, io_lock() geschützt
 ├── queue/
 │   ├── <id>.json                 # Metadaten, siehe unten
@@ -95,7 +91,7 @@ Umsetzung von "keine Nebenwirkungen für andere Benutzer".
 | `action/save.php` | `ACTION_ACT_PREPROCESS` | BEFORE | Browser-Save: bei `needsReview()` → Text in Queue, Redirect auf Bestätigungsseite statt normalem Save-Flow |
 | `action/save.php` | `COMMON_WIKIPAGE_SAVE` | BEFORE | Sicherheitsnetz für alle Pfade (Remote/CLI/Fremdplugins): Queue + `preventDefault()`. Remote-Kontext → `RemoteException` (ADR-0003) |
 | `action/media.php` | `MEDIA_UPLOAD_FINISH` | BEFORE | Upload-Bytes in Queue kopieren, `preventDefault()` |
-| `action/review.php` | `ACTION_ACT_PREPROCESS` | BEFORE | `do=aireview_approve`/`_reject`/`_resolve`, `checkSecurityToken()` Pflicht, Selbst-Freigabe verboten |
+| `action/review.php` | `ACTION_ACT_PREPROCESS` | BEFORE | `do=reviewqueue_approve`/`_reject`/`_resolve`, `checkSecurityToken()` Pflicht, Selbst-Freigabe verboten |
 | `action/banner.php` | `TPL_ACT_RENDER` | BEFORE | Banner einblenden, nur wenn aktueller User in `reviewer_groups` **und** offene Pending-Changes für diese Seite existieren |
 | `action/banner.php` | `MENU_ITEMS_ASSEMBLY` | AFTER | Menüpunkt "Review-Queue" für Reviewer |
 | `admin.php` | `AdminPlugin`-Interface | — | Queue-Liste (gruppiert nach Ziel-Seite), Diff-Ansicht, Approve/Reject/Edit-vor-Approve |
@@ -147,7 +143,7 @@ Testszenario 17.
 ## MCP-Sichtbarkeit
 
 `remote.php` implementiert `dokuwiki\Extension\RemotePlugin`. Jede öffentliche Methode
-mit DocBlock erscheint automatisch als `plugin_aireview_<methode>`-Tool im `mcp`-Plugin
+mit DocBlock erscheint automatisch als `plugin_reviewqueue_<methode>`-Tool im `mcp`-Plugin
 (siehe `docs/research/kaos-hooks.md`, Abschnitt zum `mcp`-Plugin — `SchemaGenerator`
 generiert das automatisch aus `Api::getPluginMethods()`). Kein zusätzlicher
 Integrationscode auf unserer Seite nötig, nur saubere DocBlocks für gute
