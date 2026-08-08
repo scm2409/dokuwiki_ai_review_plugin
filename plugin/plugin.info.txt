@@ -1,0 +1,6 @@
+base reviewqueue
+author Martin Schögler
+email martin.schoegler@box44.org
+date 2026-08-08
+name reviewqueue
+desc Holds back page and media saves from configured users or groups in a review queue instead of publishing them immediately.

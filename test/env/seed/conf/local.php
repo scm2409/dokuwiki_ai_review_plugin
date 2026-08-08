@@ -23,5 +23,7 @@ $conf['useheading']      = 1;
 $conf['userewrite']      = 0;
 $conf['send404']         = 0;
 
-// reviewqueue: martin reviews via a dedicated group, not DokuWiki admin rights
+// reviewqueue: kail (the AI agent account) is the only user whose saves are
+// held back; martin reviews via a dedicated group, not DokuWiki admin rights
+$conf['plugin']['reviewqueue']['review_users']    = 'kail';
 $conf['plugin']['reviewqueue']['reviewer_groups'] = 'reviewer';
