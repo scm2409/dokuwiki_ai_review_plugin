@@ -191,6 +191,11 @@ class helper_plugin_reviewqueue_apply extends Plugin
         /** @var helper_plugin_reviewqueue_store $store */
         $store = $this->loadHelper('reviewqueue_store');
 
+        if (($record['operation'] ?? 'upload') === 'delete') {
+            $this->replayMediaDelete($record);
+            return;
+        }
+
         $path = $store->mediaPath($record['id']);
         if ($path === null) {
             throw new \RuntimeException("reviewqueue: stored upload for #{$record['id']} is missing");
@@ -215,6 +220,33 @@ class helper_plugin_reviewqueue_apply extends Plugin
         // media_save() reports failure as an [message, level] pair.
         if (is_array($res)) {
             throw new \RuntimeException('reviewqueue: media_save failed: ' . $res[0]);
+        }
+    }
+
+    /**
+     * Carry out an approved media deletion as the original requester.
+     *
+     * @param array $record
+     * @throws \RuntimeException when the deletion is refused
+     */
+    protected function replayMediaDelete(array $record)
+    {
+        global $INPUT;
+
+        $originalUser = $INPUT->server->str('REMOTE_USER');
+        $INPUT->server->set('REMOTE_USER', $record['author']);
+        helper_plugin_reviewqueue_policy::beginApply();
+        try {
+            $res = media_delete($record['target'], AUTH_DELETE);
+        } finally {
+            helper_plugin_reviewqueue_policy::endApply();
+            $INPUT->server->set('REMOTE_USER', $originalUser);
+        }
+
+        // Already gone is an acceptable outcome for a deletion; anything else
+        // means the file is still there and the approval did not take effect.
+        if ($res !== DOKU_MEDIA_DELETED && $res !== DOKU_MEDIA_NOT_EXIST) {
+            throw new \RuntimeException("reviewqueue: media_delete refused ({$res})");
         }
     }
 

@@ -34,3 +34,6 @@ $lang['no_base']       = 'Die Fassung, gegen die diese Änderung geschrieben wur
 
 $lang['media_info']      = 'Hochgeladene Datei: %s, %s.';
 $lang['media_overwrite'] = 'Dieser Upload würde eine bereits vorhandene Datei ersetzen.';
+
+$lang['media_delete'] = 'Diese Änderung schlägt vor, die Datei zu LÖSCHEN. Eine Freigabe entfernt sie aus dem Wiki.';
+$lang['act_denied']   = 'Die Aktion „%s" steht Ihrem Konto nicht zur Verfügung, weil so vorgenommene Änderungen kein Review durchlaufen können.';

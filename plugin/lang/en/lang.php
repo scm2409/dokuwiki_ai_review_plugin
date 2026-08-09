@@ -34,3 +34,6 @@ $lang['no_base']       = 'The revision this change was written against is no lon
 
 $lang['media_info']      = 'Uploaded file: %s, %s.';
 $lang['media_overwrite'] = 'This upload would replace a file that already exists.';
+
+$lang['media_delete'] = 'This change proposes DELETING the file. Approving it removes the file from the wiki.';
+$lang['act_denied']   = 'The action "%s" is not available to your account, because changes made that way cannot go through review.';

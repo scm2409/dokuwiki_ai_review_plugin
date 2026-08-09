@@ -23,6 +23,52 @@ class action_plugin_reviewqueue_media extends ActionPlugin
     public function register(EventHandler $controller)
     {
         $controller->register_hook('MEDIA_UPLOAD_FINISH', 'BEFORE', $this, 'handleUpload');
+        $controller->register_hook('MEDIA_DELETE_FILE', 'BEFORE', $this, 'handleDelete');
+    }
+
+    /**
+     * Deleting a media file is a content change like any other, so it goes
+     * through the queue too - otherwise a review-scoped account could remove
+     * files outright while being unable to add them.
+     *
+     * MEDIA_DELETE_FILE is preventable (inc/media.php:276). Its caller,
+     * media_delete(), reports outcomes as DOKU_MEDIA_* constants rather than
+     * messages, so there is no channel to explain the queueing here; the
+     * agent-facing explanation comes from the queue tools instead.
+     */
+    public function handleDelete(Event $event, $param)
+    {
+        /** @var helper_plugin_reviewqueue_policy $policy */
+        $policy = $this->loadHelper('reviewqueue_policy');
+        if ($policy->isApplying()) return;
+        if (!$policy->reviewMedia()) return;
+
+        global $INPUT;
+        $user = $INPUT->server->str('REMOTE_USER');
+        if (!$policy->needsReview($user)) return;
+
+        $event->preventDefault();
+
+        /** @var helper_plugin_reviewqueue_store $store */
+        $store = $this->loadHelper('reviewqueue_store');
+
+        try {
+            $store->enqueue([
+                'type'      => 'media',
+                'operation' => 'delete',
+                'target'    => $event->data['id'],
+                'author'    => $user,
+                'summary'   => '',
+                'minor'     => false,
+                'baseRev'   => null,
+                'baseHash'  => '',
+                'origin'    => 'remote',
+            ], '');
+        } catch (\Throwable $e) {
+            \dokuwiki\ErrorHandler::logException($e);
+            // preventDefault() already stopped the deletion, so failing to
+            // queue it still leaves the file in place - fail-closed.
+        }
     }
 
     public function handleUpload(Event $event, $param)

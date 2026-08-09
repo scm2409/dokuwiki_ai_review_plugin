@@ -233,6 +233,12 @@ class admin_plugin_reviewqueue extends AdminPlugin
      */
     protected function renderMedia(array $record)
     {
+        if (($record['operation'] ?? 'upload') === 'delete') {
+            echo '<p class="reviewqueue-media reviewqueue-conflict">' .
+                hsc($this->getLang('media_delete')) . '</p>';
+            return;
+        }
+
         $path = $this->store->mediaPath($record['id']);
         $size = $path ? filesize($path) : 0;
 

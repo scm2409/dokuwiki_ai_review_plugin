@@ -85,6 +85,20 @@ direkt. Noch offene Änderungen in `queue/` werden dann aber nie mehr
 veröffentlicht. Vor dem Entfernen also die Queue leeren — oder das Verzeichnis
 aufheben, die Dateien sind reiner Text und lassen sich von Hand übertragen.
 
+## Konto des Agenten möglichst eng halten
+
+Das Plugin fängt alle Schreibpfade ab, die DokuWiki selbst anbietet (siehe
+[`design/write-path-audit.md`](design/write-path-audit.md)). Zwei Dinge liegen
+aber außerhalb seiner Reichweite und sollten über die Konfiguration abgesichert
+werden:
+
+- **ACL knapp halten.** Braucht das Konto keine Löschrechte, gib ihm `AUTH_UPLOAD`
+  (8) statt `AUTH_DELETE` (16). Änderungen laufen ohnehin über die Queue; enge
+  Rechte sind die zweite Verteidigungslinie.
+- **`$conf['remoteuser']`** auf die Konten begrenzen, die die Remote-API wirklich
+  brauchen. Fremdplugins können eigene schreibende API-Methoden mitbringen, und
+  dafür gibt es in DokuWiki keinen Abfangpunkt.
+
 ## Sicherheitseigenschaften
 
 - **Fail-closed:** Lässt sich die Queue nicht schreiben, wird die Speicherung
@@ -95,3 +109,7 @@ aufheben, die Dateien sind reiner Text und lassen sich von Hand übertragen.
 - **CSRF-Schutz** über DokuWikis `checkSecurityToken()`.
 - Ungeprüfte Inhalte landen weder im Suchindex noch in Feeds oder der
   Versionsgeschichte.
+- **Keine ungeprüften Änderungen:** Seiten anlegen/ändern/löschen sowie
+  Media-Uploads *und* -Löschungen laufen alle über die Queue. Aktionen, die
+  sich nicht reviewen lassen (etwa Umbenennen durch das `move`-Plugin), werden
+  für reviewpflichtige Konten abgewiesen statt ungeprüft ausgeführt.

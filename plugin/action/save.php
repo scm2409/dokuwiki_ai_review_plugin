@@ -36,12 +36,50 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         $controller->register_hook('COMMON_WIKIPAGE_SAVE', 'BEFORE', $this, 'handleWikipageSave');
     }
 
+    /**
+     * Actions a review-scoped user may perform. Everything not listed is
+     * refused for them - see handleActPreprocess().
+     *
+     * @var string[]
+     */
+    protected const ALLOWED_ACTS = [
+        // reading and navigating
+        'show', 'search', 'recent', 'index', 'revisions', 'diff', 'backlink',
+        'media', 'mediadetail', 'sitemap', 'subscribe', 'redirect', 'resendpwd',
+        'login', 'logout', 'profile', 'check', 'denied', 'draftdel', 'locked',
+        // editing, which is what the queue exists to intercept
+        'edit', 'preview', 'save', 'cancel', 'conflict', 'draft',
+        // our own review actions (a reviewer is normally not review-scoped,
+        // but the two lists can overlap in principle)
+        'admin',
+    ];
+
     /** @param Event $event */
     public function handleActPreprocess(Event $event, $param)
     {
-        if ($event->data === 'save') {
+        $act = is_array($event->data) ? array_key_first($event->data) : $event->data;
+
+        if ($act === 'save') {
             self::$isBrowserSaveAct = true;
         }
+
+        /** @var helper_plugin_reviewqueue_policy $policy */
+        $policy = $this->loadHelper('reviewqueue_policy');
+        if ($policy->isApplying()) return;
+
+        global $INPUT;
+        if (!$policy->needsReview($INPUT->server->str('REMOTE_USER'))) return;
+
+        // Deny-by-default for anything outside the known-safe set. Plugins add
+        // their own actions (page renames from the move plugin being the
+        // obvious example) and those change the wiki without going anywhere
+        // near COMMON_WIKIPAGE_SAVE, so there is nothing for the queue to
+        // intercept. An allowlist means a plugin installed later is refused
+        // rather than silently unreviewed - the safe direction to fail.
+        if (in_array($act, self::ALLOWED_ACTS, true)) return;
+
+        msg(sprintf($this->getLang('act_denied'), hsc((string) $act)), -1);
+        $event->data = 'show';
     }
 
     /**
