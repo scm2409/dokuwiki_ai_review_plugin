@@ -23,7 +23,7 @@ anlegen/ändern/löschen und Media-Uploads laufen über die Queue, mit
 3-Wege-Merge, Konfliktauflösung, Admin-Oberfläche und MCP-Werkzeugen für den
 Agenten. 46 End-to-End-Tests laufen gegen eine echte Installation im Container.
 
-Installation und Betrieb: [`docs/usage.md`](docs/usage.md).
+Installation: [`INSTALL.md`](INSTALL.md). Betrieb: [`docs/usage.md`](docs/usage.md).
 Phasenstand: [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Dokumentation
@@ -35,7 +35,8 @@ Phasenstand: [`docs/roadmap.md`](docs/roadmap.md).
 - [`docs/design/`](docs/design/) — Architekturentscheidungen (ADRs)
 - [`docs/testing/strategy.md`](docs/testing/strategy.md) — Testkonzept und
   Szenarienmatrix
-- [`docs/usage.md`](docs/usage.md) — Installation, Betrieb, Backup, Sicherheit
+- [`INSTALL.md`](INSTALL.md) — Installation Schritt für Schritt, inkl. MCP-Anbindung
+- [`docs/usage.md`](docs/usage.md) — Betrieb, Konflikte, Wartung, Backup, Sicherheit
 - [`docs/roadmap.md`](docs/roadmap.md) — Phasenplan und Status
 - [`skills/`](skills/) — Agent-Skill, der einer KI den Review-Workflow erklärt
 

@@ -1,0 +1,32 @@
+reviewqueue Plugin for DokuWiki
+
+Holds back page and media changes from configured users or groups in a review
+queue instead of publishing them immediately. Everyone else keeps saving
+directly. Intended for wikis where an AI agent has its own account, but the
+plugin itself is user-scoped, not AI-specific.
+
+If you install this plugin manually, make sure it is installed in
+lib/plugins/reviewqueue/ - if the folder is called different it
+will not work!
+
+Please refer to https://www.dokuwiki.org/plugins for additional info
+on how to install plugins in DokuWiki.
+
+Target version: DokuWiki 2024-02-06b "Kaos". Newer releases are untested.
+
+Full documentation lives in the source repository this plugin was built
+from: INSTALL.md for setup, docs/usage.md for day-to-day operation.
+
+----
+Copyright (C) Martin Schögler <martin.schoegler@box44.org>
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; version 2 of the License
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+See the LICENSE file for details

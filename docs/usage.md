@@ -1,31 +1,10 @@
-# Installation und Betrieb
+# Betrieb
 
 Zielversion: DokuWiki **2024-02-06b "Kaos"**. Neuere Releases sind nicht getestet.
 
-## Installation
-
-1. Inhalt von [`plugin/`](../plugin) nach `lib/plugins/reviewqueue/` kopieren.
-   Der Verzeichnisname muss exakt `reviewqueue` lauten — DokuWiki leitet den
-   Klassennamen daraus ab.
-2. Für den Zugriff eines KI-Agenten zusätzlich das
-   [`mcp`-Plugin](https://github.com/splitbrain/dokuwiki-plugin-mcp) nach
-   `lib/plugins/mcp/` installieren und in der Konfiguration
-   `$conf['remote'] = 1` setzen.
-3. Konfiguration in *Administration → Konfiguration* (Abschnitt `reviewqueue`)
-   oder direkt in `conf/local.php`:
-
-```php
-$conf['plugin']['reviewqueue']['review_users']    = 'kail';     // reviewpflichtige Logins
-$conf['plugin']['reviewqueue']['review_groups']   = '';         // oder ganze Gruppen
-$conf['plugin']['reviewqueue']['reviewer_groups'] = 'reviewer'; // wer freigeben darf
-```
-
-Damit das greift, braucht es eine Gruppe `reviewer` (oder einen anderen Namen),
-in der die prüfenden Personen sind. **Nicht** die DokuWiki-Admin-Gruppe nehmen:
-Review und Wiki-Administration sind bewusst getrennt.
-
-Wichtig: Der reviewpflichtige Benutzer braucht ganz normale Schreibrechte per
-ACL. Zurückgehalten wird die Änderung vom Plugin, nicht von der ACL.
+Einrichtung — Plugin, Konten, Konfiguration, MCP-Anbindung — steht in
+[`../INSTALL.md`](../INSTALL.md). Dieses Dokument beschreibt den laufenden
+Betrieb danach.
 
 ## Alltag
 
@@ -78,12 +57,10 @@ archive/…            dasselbe für entschiedene Änderungen
 **Dieses Verzeichnis gehört ins Backup.** Wird nur `pages/` gesichert, gehen
 offene Änderungen verloren — sie sind ja bewusst noch keine Revision.
 
-## Deinstallation
+## Aktualisieren und Deinstallieren
 
-Das Plugin ist additiv: Nach dem Entfernen speichern alle Benutzer wieder
-direkt. Noch offene Änderungen in `queue/` werden dann aber nie mehr
-veröffentlicht. Vor dem Entfernen also die Queue leeren — oder das Verzeichnis
-aufheben, die Dateien sind reiner Text und lassen sich von Hand übertragen.
+Siehe [`../INSTALL.md`](../INSTALL.md). Kernpunkt: vor dem Entfernen die Queue
+leeren, sonst werden offene Änderungen nie veröffentlicht.
 
 ## Konto des Agenten möglichst eng halten
 
