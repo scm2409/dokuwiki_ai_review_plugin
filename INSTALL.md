@@ -7,6 +7,25 @@ Step by step for an existing DokuWiki installation, target version
 Below, `<dokuwiki>` refers to the root directory of your installation
 (where `doku.php` lives).
 
+If your DokuWiki install lives on a remote machine, run the `cp`/`rsync`
+steps below over SSH instead — replace `<dokuwiki-host>` with that
+machine's SSH host (`user@host`, or a `~/.ssh/config` alias). The AI
+agent itself may run on yet another machine (`<agent-host>`) — only step
+10 (installing the skill) needs to reach that one; everything else
+targets `<dokuwiki-host>`.
+
+Not sure where `<dokuwiki>` actually is on that host? `doku.php` is a
+distinctive enough filename to just find it:
+
+```bash
+ssh <dokuwiki-host> "find / -xdev -maxdepth 8 -name doku.php 2>/dev/null"
+```
+
+The directory containing the match is `<dokuwiki>`. `-xdev` keeps `find`
+off mounted volumes and pseudo-filesystems (`/proc`, `/sys`, …), which
+also keeps it fast — drop it if the install itself sits on a separate
+mount.
+
 ## 1. Install the plugin
 
 The directory name must be exactly `reviewqueue` — DokuWiki derives its
@@ -15,6 +34,13 @@ class names from it, and any other name results in "Plugin installed incorrectly
 ```bash
 cp -r plugin <dokuwiki>/lib/plugins/reviewqueue
 chown -R www-data:www-data <dokuwiki>/lib/plugins/reviewqueue
+```
+
+Over SSH, from your checkout of this repo:
+
+```bash
+rsync -a plugin/ <dokuwiki-host>:<dokuwiki>/lib/plugins/reviewqueue/
+ssh <dokuwiki-host> chown -R www-data:www-data <dokuwiki>/lib/plugins/reviewqueue
 ```
 
 The Extension Manager is **not** used — the plugin is not hosted on
@@ -152,8 +178,16 @@ on the next save.
 cp -r skills/dokuwiki-reviewqueue ~/.claude/skills/
 ```
 
+Over SSH, if the agent runs on a different machine (`<agent-host>`) than
+the one this repo is checked out on:
+
+```bash
+rsync -a skills/dokuwiki-reviewqueue/ <agent-host>:~/.claude/skills/dokuwiki-reviewqueue/
+```
+
 Project-scoped instead of global: to `.claude/skills/` in the respective
-project. Details in [`skills/README.md`](skills/README.md).
+project — adjust the target path in the command above accordingly.
+Details in [`skills/README.md`](skills/README.md).
 
 ## 11. Verify end to end
 
@@ -167,6 +201,12 @@ in the review queue, the page is unchanged.
 
 ```bash
 rsync -a --delete plugin/ <dokuwiki>/lib/plugins/reviewqueue/
+```
+
+Over SSH:
+
+```bash
+rsync -a --delete plugin/ <dokuwiki-host>:<dokuwiki>/lib/plugins/reviewqueue/
 ```
 
 `--delete` is important so that removed files don't linger. The queue
