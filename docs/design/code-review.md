@@ -1,109 +1,104 @@
-# Code-Review der Implementierung (2026-08-08)
+# Code review of the implementation (2026-08-08)
 
-Durchsicht des Plugin-Quellcodes, wie vom Nutzer angefordert. Getrennt nach
-behoben / bewusst offen, damit der Stand ehrlich nachvollziehbar bleibt.
+Review of the plugin's source code, as requested by the user. Split into fixed / knowingly
+left open, so the current state stays honestly traceable.
 
-## Behoben
+## Fixed
 
-### 1. Verwaister Seiten-Lock nach abgefangenem Remote-Save (schwerwiegend)
+### 1. Orphaned page lock after an intercepted remote save (severe)
 
-`ApiCore::savePage()` ist aufgebaut als `lock()` → `saveWikiText()` → `unlock()`.
-Die `RemoteException` aus [ADR-0003](adr-0003-ki-feedback-remoteexception.md) fliegt
-mitten aus `saveWikiText()` heraus, also wurde `unlock()` **nie** erreicht.
+`ApiCore::savePage()` is structured as `lock()` → `saveWikiText()` → `unlock()`. The
+`RemoteException` from [ADR-0003](adr-0003-ai-feedback-remoteexception.md) is thrown from
+right in the middle of `saveWikiText()`, so `unlock()` was **never** reached.
 
-Wirkung: Nach jeder eingereichten Änderung blieb die Seite für die volle
-Lock-Dauer gesperrt. `martin` bekam „The page is currently locked" und konnte
-genau die Seiten nicht bearbeiten, an denen der Agent arbeitet — also exakt die
-Störung des normalen Wiki-Betriebs, die dieses Plugin vermeiden soll. Ein
-dauerhaft schreibender Agent hätte Seiten praktisch dauerbelegt.
+Effect: after every submitted change, the page stayed locked for the full lock
+duration. `martin` got "The page is currently locked" and couldn't edit exactly the
+pages the agent was working on — precisely the disruption to normal wiki operation
+that this plugin is meant to avoid. An agent that kept writing continuously could have
+kept pages effectively locked permanently.
 
-Behoben in `action/save.php`: expliziter `unlock()` vor dem Werfen. Regressionstest
-in `visibility.api.spec.ts`. Der Browser-Pfad war nie betroffen, weil er normal
-zurückkehrt und `dokuwiki\Action\Save` sein eigenes `unlock()` erreicht.
+Fixed in `action/save.php`: an explicit `unlock()` before the throw. Regression test in
+`visibility.api.spec.ts`. The browser path was never affected, because it returns
+normally and `dokuwiki\Action\Save` reaches its own `unlock()`.
 
-### 2. Mehrzeilige Docblock-Tags zerstören die MCP-Tool-Beschreibungen
+### 2. Multi-line docblock tags break the MCP tool descriptions
 
-DokuWikis Parser (`inc/Remote/OpenApiDoc/DocBlock.php:49`) entfernt bei
-`@param`/`@return`/`@throws` nur die *erste* Zeile. Fortsetzungszeilen landeten in
-der generierten Tool-Beschreibung, sodass Agenten Fragmente wie
-„'approved', 'rejected' or 'superseded'), comment (reviewer's" als Tool-Doku sahen.
-Behoben: Tags einzeilig, Strukturbeschreibung im Prosateil. Test in
-`hardening.api.spec.ts` prüft die Beschreibungen jetzt mit.
+DokuWiki's parser (`inc/Remote/OpenApiDoc/DocBlock.php:49`) strips only the *first*
+line for `@param`/`@return`/`@throws`. Continuation lines ended up in the generated
+tool description, so agents saw fragments like
+"'approved', 'rejected' or 'superseded'), comment (reviewer's" as tool documentation.
+Fixed: tags kept single-line, structural description moved into the prose section.
+`hardening.api.spec.ts` now checks the descriptions as well.
 
-### 3. `$conf['savedir']` als Pfadanker (bereits in Phase 4 behoben, hier dokumentiert)
+### 3. `$conf['savedir']` as a path anchor (already fixed in Phase 4, documented here)
 
-Siehe `CLAUDE.md`. Relativer Config-Wert, der je nach Einstiegsskript anders
-auflöst — jetzt `dirname($conf['datadir'])`.
+See `CLAUDE.md`. A relative config value that resolves differently depending on the
+entry script — now `dirname($conf['datadir'])`.
 
-### 4. ID-Kollision beim Einreihen
+### 4. ID collision when enqueuing
 
-`io_lock()` gibt nach 3 Sekunden auf und behandelt den Lock als veraltet; unter
-pathologischer Last könnten zwei Aufrufer dieselbe ID bekommen und der zweite
-den ersten überschreiben. Ein Lasttest mit 8 parallelen Saves ergab saubere,
-eindeutige IDs — das Risiko ist also gering, aber stiller Verlust einer
-eingereichten Änderung widerspricht dem fail-closed-Prinzip. `enqueue()` bricht
-jetzt ab, statt zu überschreiben.
+`io_lock()` gives up after 3 seconds and treats the lock as stale; under pathological
+load, two callers could get the same ID, with the second overwriting the first. A load
+test with 8 parallel saves produced clean, unique IDs — so the risk is low, but silent
+loss of a submitted change contradicts the fail-closed principle. `enqueue()` now aborts
+instead of overwriting.
 
-## Bewusst offen
+## Knowingly left open
 
-### A. Reviewer-Zugriff prüft die ACL der Zielseite nicht
+### A. Reviewer access doesn't check the target page's ACL
 
-`remote.php::checkChangeAccess()` und die Admin-Queue lassen jeden Nutzer aus
-`reviewer_groups` **jede** offene Änderung einsehen — auch wenn er die Zielseite
-selbst nicht lesen dürfte. In der Testumgebung fällt das nicht auf (alle dürfen
-alles).
+`remote.php::checkChangeAccess()` and the admin queue let any user from
+`reviewer_groups` view **any** open change — even if they wouldn't be allowed to read
+the target page itself. In the test environment this isn't noticeable (everyone can do
+everything).
 
-Korrekt wäre zusätzlich `auth_quickaclcheck($target) >= AUTH_READ`. Nicht sofort
-geändert, weil es den Review-Prozess in Installationen mit engen ACLs
-stillschweigend brechen kann (Änderungen würden für den zuständigen Reviewer
-unsichtbar in der Queue liegen bleiben) — das braucht eine bewusste Entscheidung
-darüber, was dann passieren soll, plus eine restriktive Test-ACL. Gehört in
-Phase 9 (Security-Review).
+The correct fix would be an additional `auth_quickaclcheck($target) >= AUTH_READ`. Not
+changed immediately, because it could silently break the review process in
+installations with tight ACLs (changes would sit invisibly in the queue for the
+responsible reviewer) — that needs a deliberate decision about what should happen then,
+plus a restrictive test ACL. Belongs in Phase 9 (security review).
 
-### B. `archive()` kann teilweise ausgeführt abbrechen
+### B. `archive()` can abort partway through
 
-Verschiebt `.json` und `.content` nacheinander. Schlägt das zweite `rename()`
-fehl, bleibt ein halb archivierter Zustand zurück. Praktisch unwahrscheinlich
-(gleiches Dateisystem, unmittelbar nacheinander); der Effekt wäre eine Änderung,
-deren Metadaten archiviert sind, deren Inhalt aber noch in `queue/` liegt.
+Moves `.json` and `.content` one after another. If the second `rename()` fails, a
+half-archived state is left behind. Practically unlikely (same filesystem, immediately
+in sequence); the effect would be a change whose metadata is archived but whose content
+still sits in `queue/`.
 
-### C. `replaySave()` setzt nur `REMOTE_USER`, nicht `$USERINFO`
+### C. `replaySave()` only sets `REMOTE_USER`, not `$USERINFO`
 
-Für die Changelog-Attribution und Benachrichtigungen reicht das (verifiziert:
-Freigaben erscheinen korrekt als `kail`). Ein Fremdplugin, das in
-`COMMON_WIKIPAGE_SAVE` auf `$USERINFO['grps']` schaut, sähe während der Freigabe
-allerdings die Gruppen des Reviewers. Bisher kein bekannter Fall.
+For changelog attribution and notifications, that's sufficient (verified: approvals
+show up correctly as `kail`). A third-party plugin that looks at `$USERINFO['grps']`
+in `COMMON_WIKIPAGE_SAVE`, however, would see the reviewer's groups during the
+approval. No known case so far.
 
-### D. `getContent()` liest über `io_readFile()` mit `cleanText()`
+### D. `getContent()` reads via `io_readFile()` with `cleanText()`
 
-Für Wikitext richtig (DokuWiki behandelt Seiten genauso). **Für Phase 7 (Media)
-ist es eine Falle**: Binärdaten dürfen so nicht gelesen werden. Beim Umsetzen der
-Media-Queue muss der Binärpfad `file_get_contents()`/`file_put_contents()`
-verwenden.
+Correct for wikitext (DokuWiki treats pages the same way). **For Phase 7 (media), it's
+a trap**: binary data must not be read that way. When implementing the media queue, the
+binary path must use `file_get_contents()`/`file_put_contents()`.
 
-## Nicht beanstandet
+## Not flagged
 
-- Kein Path-Traversal-Risiko bei Änderungs-IDs: alle Eingänge casten nach `int`
+- No path traversal risk with change IDs: all inputs are cast to `int`
   (`$INPUT->int('rqid')`, `(int) $id`).
-- Ausgabe-Escaping in `admin.php`/`action/banner.php` durchgehend über `hsc()`;
-  der Diff wird vom Core-Formatter escaped.
-- CSRF über `checkSecurityToken()` in `admin.php::handle()`, mit Test.
-- Selbst-Freigabe-Verbot greift auch bei direktem POST mit gültigem Token, mit Test.
-- Re-Entrancy-Flag wird in `finally` zurückgesetzt, übersteht also Exceptions.
+- Output escaping in `admin.php`/`action/banner.php` consistently via `hsc()`; the diff
+  is escaped by the core formatter.
+- CSRF via `checkSecurityToken()` in `admin.php::handle()`, with a test.
+- Self-approval ban also holds against a direct POST with a valid token, with a test.
+- The re-entrancy flag is reset in `finally`, so it survives exceptions.
 
-## Nachtrag (Suche über eigene Entwürfe)
+## Addendum (search over own drafts)
 
-### 5. Freigegebene Seiten landen nicht im Suchindex (schwerwiegend)
+### 5. Approved pages don't land in the search index (severe)
 
-Beim Testen der Entwurfssuche aufgefallen: `helper/apply.php` rief
-`saveWikiText()` direkt auf, und das rührt den Suchindex nicht an.
-`ApiCore::savePage()` ruft dafür eigens `idx_addPage()` auf, der Browser-Pfad
-verlässt sich auf den Taskrunner beim nächsten Seitenaufruf — eine Freigabe hat
-beides nicht.
+Noticed while testing draft search: `helper/apply.php` called `saveWikiText()`
+directly, which doesn't touch the search index. `ApiCore::savePage()` specifically
+calls `idx_addPage()` for that purpose, and the browser path relies on the task runner
+on the next page view — an approval has neither.
 
-Wirkung: Freigegebener Inhalt war zwar live, aber **über die Suche nicht
-auffindbar**, bis zufällig ein unbeteiligter Request den Indexer anstieß. Für ein
-Wiki ein ernster Mangel, und ausgerechnet an der Stelle, an der es um
-Auffindbarkeit geht. Behoben durch `idx_addPage()` nach der Freigabe, mit Test
-(`gaps.martin.spec.ts`, „once approved, a draft leaves the pending search and
-enters the wiki search").
+Effect: approved content was live, but **not findable via search**, until some
+unrelated request happened to trigger the indexer. A serious shortcoming for a wiki,
+and right at the point where findability matters most. Fixed by calling `idx_addPage()`
+after approval, with a test (`gaps.martin.spec.ts`, "once approved, a draft leaves the
+pending search and enters the wiki search").

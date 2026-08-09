@@ -1,61 +1,61 @@
 # dokuwiki-plugin-reviewqueue
 
-Ein DokuWiki-Plugin, das Änderungen bestimmter Benutzer (typischerweise ein KI-Agent
-mit eigenem Wiki-Konto und MCP-Zugang) nicht direkt live schaltet, sondern in eine
-Review-Queue stellt. Ein Mensch mit Reviewer-Rechten sieht die Änderung als Diff und
-gibt sie frei, lehnt sie ab oder bearbeitet sie vor der Freigabe. Alle anderen Benutzer
-sind von diesem Prozess vollständig unberührt — sie speichern wie gewohnt direkt.
+A DokuWiki plugin that doesn't put changes from certain users (typically an AI agent
+with its own wiki account and MCP access) live directly, but instead places them in a
+review queue. A human with reviewer rights sees the change as a diff and approves,
+rejects, or edits it before release. All other users are completely unaffected by this
+process — they save directly as usual.
 
-Zielversion: DokuWiki **Release 2024-02-06b "Kaos"**.
+Target version: DokuWiki **Release 2024-02-06b "Kaos"**.
 
-## Warum ein neues Plugin?
+## Why a new plugin?
 
-Bestehende Lösungen ([`approve`](https://github.com/gkrid/dokuwiki-plugin-approve),
-[`publish`](https://github.com/cosmocode/dokuwiki-plugin-publish)) lassen den Save
-durchgehen und verstecken nur unfreigegebene Revisionen vor Lesern — und sind dabei
-**namespace-** bzw. berechtigungsbasiert, nicht **benutzerbasiert**. Details siehe
-[`docs/research/existing-plugins.md`](docs/research/existing-plugins.md).
+Existing solutions ([`approve`](https://github.com/gkrid/dokuwiki-plugin-approve),
+[`publish`](https://github.com/cosmocode/dokuwiki-plugin-publish)) let the save go
+through and only hide unapproved revisions from readers — and are
+**namespace-** or permission-based rather than **user-based**. See
+[`docs/research/existing-plugins.md`](docs/research/existing-plugins.md) for details.
 
 ## Status
 
-Funktionsfähig und vollständig getestet gegen DokuWiki 2024-02-06b: Seiten
-anlegen/ändern/löschen und Media-Uploads laufen über die Queue, mit
-3-Wege-Merge, Konfliktauflösung, Admin-Oberfläche und MCP-Werkzeugen für den
-Agenten. 46 End-to-End-Tests laufen gegen eine echte Installation im Container.
+Functional and fully tested against DokuWiki 2024-02-06b: page creation, editing,
+and deletion, as well as media uploads, all go through the queue, with 3-way merge,
+conflict resolution, an admin interface, and MCP tools for the agent. 46 end-to-end
+tests run against a real installation in a container.
 
-Installation: [`INSTALL.md`](INSTALL.md). Betrieb: [`docs/usage.md`](docs/usage.md).
-Phasenstand: [`docs/roadmap.md`](docs/roadmap.md).
+Installation: [`INSTALL.md`](INSTALL.md). Operation: [`docs/usage.md`](docs/usage.md).
+Phase status: [`docs/roadmap.md`](docs/roadmap.md).
 
-## Dokumentation
+## Documentation
 
-- [`docs/research/`](docs/research/) — Bestandsaufnahme existierender Plugins und
-  verifizierte DokuWiki-Kaos-Hook-Punkte
-- [`docs/design/spec.md`](docs/design/spec.md) — Zustandsmaschine, Datenformate,
-  Konfiguration
-- [`docs/design/`](docs/design/) — Architekturentscheidungen (ADRs)
-- [`docs/testing/strategy.md`](docs/testing/strategy.md) — Testkonzept und
-  Szenarienmatrix
-- [`INSTALL.md`](INSTALL.md) — Installation Schritt für Schritt, inkl. MCP-Anbindung
-- [`docs/usage.md`](docs/usage.md) — Betrieb, Konflikte, Wartung, Backup, Sicherheit
-- [`docs/roadmap.md`](docs/roadmap.md) — Phasenplan und Status
-- [`skills/`](skills/) — Agent-Skill, der einer KI den Review-Workflow erklärt
+- [`docs/research/`](docs/research/) — Survey of existing plugins and
+  verified DokuWiki Kaos hook points
+- [`docs/design/spec.md`](docs/design/spec.md) — State machine, data formats,
+  configuration
+- [`docs/design/`](docs/design/) — Architecture decisions (ADRs)
+- [`docs/testing/strategy.md`](docs/testing/strategy.md) — Test concept and
+  scenario matrix
+- [`INSTALL.md`](INSTALL.md) — Step-by-step installation, including MCP integration
+- [`docs/usage.md`](docs/usage.md) — Operation, conflicts, maintenance, backup, security
+- [`docs/roadmap.md`](docs/roadmap.md) — Phase plan and status
+- [`skills/`](skills/) — Agent skill that explains the review workflow to an AI
 
-## Verzeichnisstruktur
+## Directory structure
 
 ```
-plugin/     DokuWiki-Plugin-Quellcode (wird nach lib/plugins/reviewqueue/ installiert)
-skills/     Agent-Skill für den Umgang mit der Review-Queue über MCP
-test/env/   Podman-Testumgebung mit DokuWiki 2024-02-06b
-test/e2e/   Playwright-End-to-End-Tests
-docs/       Recherche, Entscheidungen, Spezifikation, Testkonzept, Bedienung
+plugin/     DokuWiki plugin source code (installed to lib/plugins/reviewqueue/)
+skills/     Agent skill for handling the review queue via MCP
+test/env/   Podman test environment with DokuWiki 2024-02-06b
+test/e2e/   Playwright end-to-end tests
+docs/       Research, decisions, specification, test concept, operation
 ```
 
-## Entwicklung
+## Development
 
 ```bash
-test/env/up.sh          # DokuWiki 2024-02-06b im Podman-Container hochfahren
-npx playwright test     # Testsuite laufen lassen
+test/env/up.sh          # bring up DokuWiki 2024-02-06b in the Podman container
+npx playwright test     # run the test suite
 test/env/down.sh
 ```
 
-Details siehe [`docs/testing/strategy.md`](docs/testing/strategy.md).
+See [`docs/testing/strategy.md`](docs/testing/strategy.md) for details.

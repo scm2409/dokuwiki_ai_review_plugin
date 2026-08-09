@@ -1,92 +1,91 @@
-# Betrieb
+# Operations
 
-Zielversion: DokuWiki **2024-02-06b "Kaos"**. Neuere Releases sind nicht getestet.
+Target version: DokuWiki **2024-02-06b "Kaos"**. Newer releases are not tested.
 
-Einrichtung — Plugin, Konten, Konfiguration, MCP-Anbindung — steht in
-[`../INSTALL.md`](../INSTALL.md). Dieses Dokument beschreibt den laufenden
-Betrieb danach.
+Setup — plugin, accounts, configuration, MCP connection — is covered in
+[`../INSTALL.md`](../INSTALL.md). This document describes ongoing
+operation afterward.
 
-## Alltag
+## Day to day
 
-**Als Autor mit Review-Pflicht** (typischerweise der KI-Agent): Speichern
-funktioniert wie gewohnt, führt aber zu einer Meldung „zur Prüfung eingereicht
-als Änderung #N". Die Seite bleibt unverändert, bis jemand freigibt.
+**As an author subject to review** (typically the AI agent): saving
+works as usual, but results in a message "submitted for review
+as change #N". The page remains unchanged until someone approves it.
 
-**Als Reviewer:** Unter *Site Tools → Review Queue* liegen alle offenen
-Änderungen mit Diff, Freigabe- und Ablehnen-Schaltfläche. Auf betroffenen Seiten
-erscheint zusätzlich ein Hinweisbanner. Eine Ablehnung sollte begründet werden —
-der Text ist für den Autor über die API abrufbar und ist bei einem Agenten die
-einzige Chance, es beim nächsten Versuch besser zu machen.
+**As a reviewer:** under *Site Tools → Review Queue* you'll find all pending
+changes with diff, approve, and reject buttons. On affected pages a
+notice banner also appears. A rejection should include a reason —
+the text is retrievable by the author via the API and, for an agent, is the
+only chance to do better on the next attempt.
 
-**Alle anderen Benutzer** merken vom Plugin nichts.
+**All other users** notice nothing of the plugin.
 
-## Konflikte
+## Conflicts
 
-Hat sich die Seite geändert, seit eine Änderung eingereicht wurde, versucht die
-Freigabe automatisch einen 3-Wege-Merge. Betreffen die Änderungen verschiedene
-Stellen, gehen beide ein. Überschneiden sie sich, wird die Änderung als
-*conflicted* markiert und im Review-Formular als Text mit Konfliktmarkern
-angeboten; die Marker müssen vor dem Veröffentlichen entfernt werden.
+If the page has changed since a change was submitted, approval automatically
+attempts a 3-way merge. If the changes affect different parts, both go in.
+If they overlap, the change is marked as
+*conflicted* and offered in the review form as text with conflict markers;
+the markers must be removed before publishing.
 
-## Wartung
+## Maintenance
 
 ```bash
-php bin/plugin.php reviewqueue list      # offene Änderungen
-php bin/plugin.php reviewqueue show 42   # eine Änderung inkl. Text
-php bin/plugin.php reviewqueue expire    # alte Einträge archivieren
+php bin/plugin.php reviewqueue list      # pending changes
+php bin/plugin.php reviewqueue show 42   # a single change including text
+php bin/plugin.php reviewqueue expire    # archive old entries
 ```
 
-Freigeben und Ablehnen gibt es bewusst nicht auf der Kommandozeile: eine
-Entscheidung muss einer Person zuzuordnen sein.
+Approving and rejecting are deliberately not available on the command line: a
+decision must be attributable to a person.
 
-`max_pending_age` (Tage) steuert, ab wann `expire` etwas tut; `0` deaktiviert
-den Verfall. Sinnvoll als Cronjob, wenn regelmäßig Änderungen liegenbleiben.
+`max_pending_age` (days) controls when `expire` takes effect; `0` disables
+expiry. Useful as a cron job if changes regularly pile up.
 
-## Datenablage und Backup
+## Data storage and backup
 
-Alles liegt unter `<savedir>/reviewqueue/`:
+Everything is located under `<savedir>/reviewqueue/`:
 
 ```
-queue/<id>.json      Metadaten
-queue/<id>.content   vorgeschlagener Seitentext
-queue/<id>.base      Textstand, auf dem die Änderung basiert (für den Merge)
-queue/<id>.media     hochgeladene Datei bei Media-Änderungen
-archive/…            dasselbe für entschiedene Änderungen
+queue/<id>.json      metadata
+queue/<id>.content   proposed page text
+queue/<id>.base      text state the change is based on (for the merge)
+queue/<id>.media     uploaded file for media changes
+archive/…            same for decided changes
 ```
 
-**Dieses Verzeichnis gehört ins Backup.** Wird nur `pages/` gesichert, gehen
-offene Änderungen verloren — sie sind ja bewusst noch keine Revision.
+**This directory belongs in the backup.** If only `pages/` is backed up, pending
+changes are lost — they are, after all, deliberately not yet a revision.
 
-## Aktualisieren und Deinstallieren
+## Updating and uninstalling
 
-Siehe [`../INSTALL.md`](../INSTALL.md). Kernpunkt: vor dem Entfernen die Queue
-leeren, sonst werden offene Änderungen nie veröffentlicht.
+See [`../INSTALL.md`](../INSTALL.md). Key point: empty the queue before
+removing the plugin, otherwise pending changes will never be published.
 
-## Konto des Agenten möglichst eng halten
+## Keeping the agent's account as narrow as possible
 
-Das Plugin fängt alle Schreibpfade ab, die DokuWiki selbst anbietet (siehe
-[`design/write-path-audit.md`](design/write-path-audit.md)). Zwei Dinge liegen
-aber außerhalb seiner Reichweite und sollten über die Konfiguration abgesichert
-werden:
+The plugin intercepts every write path that DokuWiki itself offers (see
+[`design/write-path-audit.md`](design/write-path-audit.md)). Two things, however,
+lie outside its reach and should be secured via configuration:
 
-- **ACL knapp halten.** Braucht das Konto keine Löschrechte, gib ihm `AUTH_UPLOAD`
-  (8) statt `AUTH_DELETE` (16). Änderungen laufen ohnehin über die Queue; enge
-  Rechte sind die zweite Verteidigungslinie.
-- **`$conf['remoteuser']`** auf die Konten begrenzen, die die Remote-API wirklich
-  brauchen. Fremdplugins können eigene schreibende API-Methoden mitbringen, und
-  dafür gibt es in DokuWiki keinen Abfangpunkt.
+- **Keep ACLs tight.** If the account doesn't need delete rights, give it `AUTH_UPLOAD`
+  (8) instead of `AUTH_DELETE` (16). Changes go through the queue regardless; tight
+  permissions are the second line of defense.
+- **`$conf['remoteuser']`** should be limited to the accounts that actually
+  need the remote API. Third-party plugins can bring their own writing API methods,
+  and DokuWiki has no interception point for that.
 
-## Sicherheitseigenschaften
+## Security properties
 
-- **Fail-closed:** Lässt sich die Queue nicht schreiben, wird die Speicherung
-  abgelehnt statt durchgelassen.
-- **Keine Selbst-Freigabe**, auch nicht durch direktes Absenden des Formulars.
-- **Kein ACL-Umweg:** Wer eine Seite nicht lesen darf, sieht auch die dafür
-  eingereichten Änderungen nicht — selbst als Reviewer.
-- **CSRF-Schutz** über DokuWikis `checkSecurityToken()`.
-- Ungeprüfte Inhalte landen weder im Suchindex noch in Feeds oder der
-  Versionsgeschichte.
-- **Keine ungeprüften Änderungen:** Seiten anlegen/ändern/löschen sowie
-  Media-Uploads *und* -Löschungen laufen alle über die Queue. Aktionen, die
-  sich nicht reviewen lassen (etwa Umbenennen durch das `move`-Plugin), werden
-  für reviewpflichtige Konten abgewiesen statt ungeprüft ausgeführt.
+- **Fail-closed:** if the queue cannot be written, the save is
+  rejected instead of let through.
+- **No self-approval**, not even by directly submitting the form.
+- **No ACL bypass:** whoever isn't allowed to read a page also doesn't see the
+  changes submitted for it — even as a reviewer.
+- **CSRF protection** via DokuWiki's `checkSecurityToken()`.
+- Unreviewed content ends up in neither the search index, feeds, nor the
+  version history.
+- **No unreviewed changes:** creating/editing/deleting pages as well as
+  media uploads *and* deletions all go through the queue. Actions that
+  can't be reviewed (such as renaming via the `move` plugin) are rejected
+  for review-required accounts instead of being executed unreviewed.

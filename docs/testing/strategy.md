@@ -1,128 +1,129 @@
-# Testkonzept
+# Test strategy
 
-## Ziel
+## Goal
 
-Automatisierte Tests bis auf Ende-zu-Ende-Ebene gegen eine echte DokuWiki-2024-02-06b-
-Installation — nicht nur PHP-Unit-Tests gegen isolierte Klassen. Der Kern der
-Anforderung ("KI-Änderungen brauchen Review, `martin`s Änderungen nicht") ist ein
-Integrationsverhalten über mehrere DokuWiki-Subsysteme (Save-Pipeline, Remote-API,
-ACL, Rendering) hinweg und lässt sich nur end-to-end wirklich verifizieren.
+Automated tests up to end-to-end level against a real DokuWiki 2024-02-06b
+installation — not just PHPUnit tests against isolated classes. The core of
+the requirement ("AI changes need review, `martin`'s changes don't") is
+integration behavior spanning multiple DokuWiki subsystems (save pipeline,
+remote API, ACL, rendering) and can only really be verified end-to-end.
 
-## Umgebung
+## Environment
 
-- **Container:** `test/env/Containerfile`, Basis `php:8.2-apache`, DokuWiki aus dem
-  offiziellen Tarball `dokuwiki-2024-02-06b.tgz` (nicht aus einem vorgefertigten
-  Docker-Hub-Image — deterministischer, erlaubt sauberes Vorbefüllen von `data/`).
-  Podman läuft rootless in dieser Umgebung.
-- **Plugins im Image:** unser `reviewqueue` (aus `plugin/` gemountet/kopiert) und
-  `splitbrain/dokuwiki-plugin-mcp`, auf einen festen Commit gepinnt (kein `master`-Tracking
-  im Test-Setup, damit Testläufe reproduzierbar bleiben).
+- **Container:** `test/env/Containerfile`, base `php:8.2-apache`, DokuWiki from the
+  official tarball `dokuwiki-2024-02-06b.tgz` (not from a prebuilt
+  Docker Hub image — more deterministic, allows clean pre-seeding of `data/`).
+  Podman runs rootless in this environment.
+- **Plugins in the image:** our `reviewqueue` (mounted/copied from `plugin/`) and
+  `splitbrain/dokuwiki-plugin-mcp`, pinned to a fixed commit (no `master` tracking
+  in the test setup, so test runs stay reproducible).
 - **Seeding (`test/env/seed/`):**
-  - `users.auth.php`: `admin` (DokuWiki-Admin), `martin`/`martin` (Gruppe `reviewer`),
-    `kail`/`kail` (Gruppe — keine besondere, review-pflichtig über `review_users=kail`).
-  - `acl.auth.php`: `martin` und `kail` haben Schreibrechte auf den Test-Namespace.
-  - `local.php`: `$conf['remote'] = 1`, `reviewqueue`-Konfiguration aus `docs/design/spec.md`.
-  - ein paar vorbefüllte Testseiten für Änderungs-/Konflikt-Szenarien.
-  - API-Tokens für `martin` und `kail` werden bei jedem Testlauf frisch per PHP-CLI
-    generiert (`JWT::fromUser()`, siehe `docs/research/kaos-hooks.md`), nicht fest codiert.
-- **Reproduzierbarkeit:** `test/env/up.sh` kopiert einen Pristine-`data/`-Snapshot aus
-  dem Image in ein frisches Volume, bevor der Container startet — jeder Testlauf beginnt
-  im selben Zustand. `test/env/down.sh` räumt auf.
+  - `users.auth.php`: `admin` (DokuWiki admin), `martin`/`martin` (group `reviewer`),
+    `kail`/`kail` (group — none special, review-required via `review_users=kail`).
+  - `acl.auth.php`: `martin` and `kail` have write access to the test namespace.
+  - `local.php`: `$conf['remote'] = 1`, `reviewqueue` configuration from `docs/design/spec.md`.
+  - a few pre-seeded test pages for change/conflict scenarios.
+  - API tokens for `martin` and `kail` are freshly generated via PHP CLI on every test
+    run (`JWT::fromUser()`, see `docs/research/kaos-hooks.md`), not hardcoded.
+- **Reproducibility:** `test/env/up.sh` copies a pristine `data/` snapshot from
+  the image into a fresh volume before the container starts — every test run begins
+  in the same state. `test/env/down.sh` cleans up.
 
-## Werkzeuge
+## Tools
 
-- **Playwright** (Node ist bereits vorhanden) für Browser-Interaktion — getrennte
-  `storageState`-Dateien für `martin`, `kail` (soweit browserbasiert relevant) und
+- **Playwright** (Node already present) for browser interaction — separate
+  `storageState` files for `martin`, `kail` (where browser-based is relevant), and
   `admin`.
-- **HTTP/JSON-RPC-Requests** (über Playwright's `request`-Fixture, kein Browser nötig)
-  für die Remote-API- und MCP-Szenarien — echte `mcp.php`-Aufrufe mit Bearer-Token,
-  nicht gemockt.
-- PHPUnit gegen DokuWikis `_test/`-Harness ist **bewusst kein Teil des ersten Wurfs**
-  (siehe Nicht-Ziele in `docs/roadmap.md`), bleibt aber nachrüstbar.
+- **HTTP/JSON-RPC requests** (via Playwright's `request` fixture, no browser needed)
+  for the remote API and MCP scenarios — real `mcp.php` calls with a bearer token,
+  not mocked.
+- PHPUnit against DokuWiki's `_test/` harness is **deliberately not part of the
+  first pass** (see non-goals in `docs/roadmap.md`), but remains addable later.
 
-## Szenarienmatrix
+## Scenario matrix
 
-### Reviewpflichtiger Pfad (`kail`)
+### Review-required path (`kail`)
 
-1. Neue Seite anlegen → Seite für alle unsichtbar/nicht existent, Queue-Eintrag mit
-   `state=pending` existiert → `martin` gibt frei → Seite live, Autor in der
-   Versionsgeschichte ist `kail`.
-2. Bestehende Seite ändern → Live-Inhalt bleibt bis zur Freigabe exakt der alte.
-3. Seite löschen (leerer Text) → Seite bleibt bis zur Freigabe bestehen → nach Freigabe
-   gelöscht.
-4. Media-Upload → Datei vor Freigabe nicht abrufbar → nach Freigabe vorhanden, mit `kail`
-   als Uploader in der Media-Historie.
-5. Ablehnung mit Begründung → Seite unverändert, `kail` kann über
-   `plugin.reviewqueue.getStatus` die Ablehnung samt Grund abfragen.
-6. Zwei Pending-Changes auf derselben Seite (kurz nacheinander von `kail` eingereicht)
-   → beide erscheinen einzeln in der Queue, sequentielle Freigabe funktioniert, der
-   zweite Merge berücksichtigt bereits den durch den ersten freigegebenen Stand.
+1. Create a new page → page invisible/nonexistent to everyone, queue entry with
+   `state=pending` exists → `martin` approves → page live, author in the
+   version history is `kail`.
+2. Edit an existing page → live content remains exactly the old one until approval.
+3. Delete a page (empty text) → page remains until approval → after approval
+   deleted.
+4. Media upload → file not retrievable before approval → present after approval, with
+   `kail` as uploader in the media history.
+5. Rejection with reason → page unchanged, `kail` can query the rejection along
+   with the reason via `plugin.reviewqueue.getStatus`.
+6. Two pending changes on the same page (submitted by `kail` in short succession)
+   → both appear individually in the queue, sequential approval works, the
+   second merge already takes into account the state approved by the first.
 
-### Nicht-reviewpflichtiger Pfad (`martin`) — Kernanforderung des Projekts
+### Non-review-required path (`martin`) — core project requirement
 
-7. `martin` editiert eine Seite → sofort live, **kein** Eintrag in `data/reviewqueue/queue/`
-   entsteht, Standard-DokuWiki-Verhalten in jeder messbaren Hinsicht identisch zu einer
-   Installation ganz ohne das Plugin.
-8. `martin` löscht eine Seite, lädt Medien hoch, nutzt einen Section-Edit → alles wie
-   gewohnt, keine Umleitung, kein Banner für ihn selbst.
-9. Regressionstest: `review_users` wird leer konfiguriert → auch `kail` schreibt direkt
-   (belegt, dass die Policy-Prüfung wirklich die einzige Entscheidungsstelle ist und es
-   keine versteckte Sonderbehandlung für den Namen `kail` gibt).
+7. `martin` edits a page → immediately live, **no** entry in
+   `data/reviewqueue/queue/` is created, standard DokuWiki behavior identical in
+   every measurable respect to an installation without the plugin at all.
+8. `martin` deletes a page, uploads media, uses a section edit → everything as
+   usual, no redirect, no banner for himself.
+9. Regression test: `review_users` is configured empty → `kail` also writes
+   directly (proves that the policy check is really the sole decision point and
+   there is no hidden special-casing for the name `kail`).
 
-### Konflikte
+### Conflicts
 
-10. `kail` reicht einen Change auf Basis von Revision X ein; `martin` ändert in der
-    Zwischenzeit einen *anderen* Abschnitt derselben Seite → bei Freigabe automatischer
-    Diff3-Merge, Ergebnis enthält beide Änderungen, `mergeResult=auto-merged`.
-11. `kail` und `martin` ändern denselben Abschnitt überlappend → `state=conflicted` nach
-    Freigabeversuch, Review-Editor zeigt Konfliktmarker, manuelle Auflösung durch
-    `martin` führt zu `state=approved` mit dem manuell bereinigten Text.
+10. `kail` submits a change based on revision X; in the meantime `martin` changes a
+    *different* section of the same page → automatic Diff3 merge on approval,
+    result contains both changes, `mergeResult=auto-merged`.
+11. `kail` and `martin` change the same section with overlap → `state=conflicted`
+    after the approval attempt, the review editor shows conflict markers, manual
+    resolution by `martin` leads to `state=approved` with the manually cleaned-up
+    text.
 
-### MCP Ende-zu-Ende
+### MCP end-to-end
 
-12. Echter MCP-Handshake (`initialize` → `tools/list` → `tools/call`) gegen
-    `lib/plugins/mcp/mcp.php` mit Bearer-Token für `kail`. `tools/list` enthält
-    `plugin_reviewqueue_listMyPending` u. a. `core_savePage` liefert ein `isError`-Ergebnis
-    mit der Review-ID im Text.
-13. Derselbe Ablauf mit Token für `martin` → `core_savePage` liefert Erfolg, Seite ist
-    sofort live.
+12. Real MCP handshake (`initialize` → `tools/list` → `tools/call`) against
+    `lib/plugins/mcp/mcp.php` with a bearer token for `kail`. `tools/list` contains
+    `plugin_reviewqueue_listMyPending`, among others; `core_savePage` returns an
+    `isError` result with the review ID in the text.
+13. Same flow with a token for `martin` → `core_savePage` returns success, page is
+    immediately live.
 
-### Sicherheit
+### Security
 
-14. `kail` versucht, den eigenen Pending-Change über `do=reviewqueue_approve`
-    freizugeben → abgelehnt (Selbst-Freigabe-Verbot).
-15. Ein Benutzer ohne `reviewer_groups`-Mitgliedschaft bekommt weder Zugriff auf die
-    Admin-Queue-Seite noch kann er `do=reviewqueue_approve`/`_reject` auslösen.
-16. Approve/Reject-Request ohne gültigen `checkSecurityToken()`-Wert wird abgewiesen
-    (CSRF-Schutz).
-17. Fail-closed: Store-Verzeichnis wird für die Dauer eines Tests nicht beschreibbar
-    gemacht → `kail`s Save wird mit Fehler abgelehnt, **nicht** stillschweigend live
-    geschaltet.
+14. `kail` tries to approve their own pending change via
+    `do=reviewqueue_approve` → rejected (self-approval ban).
+15. A user without `reviewer_groups` membership gets neither access to the
+    admin queue page nor can they trigger `do=reviewqueue_approve`/`_reject`.
+16. An approve/reject request without a valid `checkSecurityToken()` value is
+    rejected (CSRF protection).
+17. Fail-closed: the store directory is made non-writable for the duration of a
+    test → `kail`'s save is rejected with an error, **not** silently switched
+    live.
 
-## Ausführung
+## Execution
 
 ```bash
-test/env/up.sh                 # Container bauen/starten, frischer data/-Stand, Tokens erzeugen
-cd test/e2e && npm install     # einmalig
+test/env/up.sh                 # build/start container, fresh data/ state, generate tokens
+cd test/e2e && npm install     # once
 npx playwright install chromium
-npx playwright test            # gesamte Matrix
+npx playwright test            # entire matrix
 ../env/down.sh
 ```
 
-`up.sh` erzeugt `test/e2e/.auth/tokens.json` (Bearer-Tokens für `martin`/`kail`) und ist
-Voraussetzung für die API-/MCP-Tests. Die Login-Storage-States für die Browser-Tests
-erzeugt Playwright selbst über das `setup`-Projekt (`tests/auth.setup.ts`,
-Standard-Playwright-Auth-Pattern über `dependencies` in `playwright.config.ts`) —
-kein manueller Schritt nötig.
+`up.sh` generates `test/e2e/.auth/tokens.json` (bearer tokens for `martin`/`kail`) and is
+a prerequisite for the API/MCP tests. The login storage states for the browser tests
+are generated by Playwright itself via the `setup` project (`tests/auth.setup.ts`,
+standard Playwright auth pattern via `dependencies` in `playwright.config.ts`) —
+no manual step needed.
 
-Port konfigurierbar über `REVIEWQUEUE_TEST_PORT` (Default `8080`), muss für `up.sh` und
-`playwright.config.ts` konsistent gesetzt sein.
+Port configurable via `REVIEWQUEUE_TEST_PORT` (default `8080`), must be set
+consistently for `up.sh` and `playwright.config.ts`.
 
-**Bekannte Einschränkung in dieser Sandbox:** `playwright install --with-deps` scheitert
-ohne `sudo`; `playwright install chromium` (ohne `--with-deps`) reicht hier aus, weil die
-nötigen OS-Bibliotheken bereits vorhanden sind. In einer frischen CI-Umgebung ggf.
-`--with-deps` (mit Root-Rechten) verwenden.
+**Known limitation in this sandbox:** `playwright install --with-deps` fails
+without `sudo`; `playwright install chromium` (without `--with-deps`) is sufficient here,
+because the required OS libraries are already present. In a fresh CI environment, use
+`--with-deps` (with root privileges) if needed.
 
-CI-Tauglichkeit (späterer Schritt, nicht Teil der ersten Phasen): dieselben Befehle in
-einer Pipeline, `test/env/up.sh` liefert bereits einen klaren Exit-Code bei
-Startproblemen (30s Poll-Timeout auf `doku.php`).
+CI readiness (a later step, not part of the first phases): the same commands in
+a pipeline, `test/env/up.sh` already provides a clear exit code for
+startup problems (30s poll timeout on `doku.php`).

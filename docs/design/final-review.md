@@ -1,91 +1,88 @@
-# Abschluss-Review (2026-08-09)
+# Final review (2026-08-09)
 
-Vollständige Durchsicht nach Fertigstellung aller Phasen, wie vom Nutzer
-angefordert. Ergänzt [`code-review.md`](code-review.md) (Zwischenstand) und
+Complete review after completion of all phases, as requested by the user. Complements
+[`code-review.md`](code-review.md) (interim status) and
 [`../testing/coverage-review.md`](../testing/coverage-review.md).
 
-## Systematische Prüfungen
+## Systematic checks
 
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| Sprachschlüssel: verwendet vs. definiert, `en` vs. `de` | vollständig deckungsgleich, keine Waisen |
-| Konfigurationsschlüssel: `default.php` vs. `metadata.php` vs. `settings.php` vs. Code | vollständig deckungsgleich |
-| PHP-Syntax aller Dateien gegen PHP 8.2 | fehlerfrei |
-| Ausgabe-Escaping | durchgehend `hsc()`; Diff und Formulare über Core-Klassen |
-| Eingaben aus Requests | IDs durchgehend `int`-gecastet, kein Path-Traversal möglich |
-| Testsuite | 46 Tests, deterministisch, gegen echte Installation |
+| Language keys: used vs. defined, `en` vs. `de` | fully congruent, no orphans |
+| Config keys: `default.php` vs. `metadata.php` vs. `settings.php` vs. code | fully congruent |
+| PHP syntax of all files against PHP 8.2 | error-free |
+| Output escaping | consistently `hsc()`; diff and forms via core classes |
+| Inputs from requests | IDs consistently cast to `int`, no path traversal possible |
+| Test suite | 46 tests, deterministic, against a real installation |
 
-## Beim Abschluss-Review behoben
+## Fixed during the final review
 
-### 1. Banner ignorierte konfliktbehaftete Änderungen
+### 1. Banner ignored changes in conflict
 
-`action/banner.php` filterte auf `state = pending`. Eine Änderung im Zustand
-`conflicted` — also gerade die, die Aufmerksamkeit braucht — erzeugte keinen
-Hinweis mehr auf der betroffenen Seite. Jetzt zählen beide Zustände.
+`action/banner.php` filtered on `state = pending`. A change in the `conflicted` state —
+i.e. exactly the one that needs attention — no longer produced a notice on the affected
+page. Both states are now counted.
 
-### 2. Banner prüfte nur die Reviewer-Rolle, nicht die Seitenrechte
+### 2. Banner only checked the reviewer role, not the page permissions
 
-Nach dem Schließen der ACL-Lücke in Phase 9 war der Banner die letzte Stelle,
-die noch `isReviewer()` statt `mayReviewTarget()` benutzte. Praktisch unkritisch
-(der Banner erscheint nur auf einer Seite, die der Betrachter ohnehin gerade
-liest), aber inkonsistent — angeglichen.
+After closing the ACL gap in Phase 9, the banner was the last place still using
+`isReviewer()` instead of `mayReviewTarget()`. Practically uncritical (the banner only
+appears on a page the viewer is reading anyway), but inconsistent — brought in line.
 
-### 3. `searchMyPending` prüfte Media mit Seitenrechten
+### 3. `searchMyPending` checked media entries with page permissions
 
-Für Einträge vom Typ `media` wurde `AUTH_READ` auf die Media-ID geprüft statt
-`AUTH_UPLOAD`. Angeglichen an `mayReviewTarget()`.
+For entries of type `media`, `AUTH_READ` was checked on the media ID instead of
+`AUTH_UPLOAD`. Brought in line with `mayReviewTarget()`.
 
-### 4. Verwaiste Queue-Einträge bei fehlgeschlagenem Upload
+### 4. Orphaned queue entries on a failed upload
 
-Schlug in `action/media.php` das Kopieren der Datei *nach* dem Anlegen des
-Datensatzes fehl, blieb ein Eintrag ohne Nutzdaten zurück, der bei der Freigabe
-zwangsläufig scheitert. Er wird jetzt über `store::discard()` entfernt —
-bewusst gelöscht statt archiviert, weil es keine menschliche Entscheidung gibt,
-die man festhalten müsste.
+If the file copy in `action/media.php` failed *after* the record was created, an entry
+without payload data was left behind, which would inevitably fail on approval. It is
+now removed via `store::discard()` — deliberately deleted rather than archived, because
+there is no human decision that needs to be recorded.
 
-### 5. Zwei Tests konnten falsch-positiv bestehen
+### 5. Two tests could pass as false positives
 
-- „kail sieht die Admin-Queue nicht" hätte auch bei leerer Queue bestanden und
-  damit nichts belegt. Der Test legt jetzt zuerst eine Änderung mit eindeutigem
-  Markertext an und prüft zusätzlich auf dessen Abwesenheit.
-- Der CSRF-Test prüfte nur, dass die Zielseite unverändert blieb — das wäre auch
-  bei einem aus anderem Grund fehlgeschlagenen Approve der Fall gewesen. Er
-  prüft jetzt zusätzlich, dass die Änderung noch `pending` ist.
+- "kail doesn't see the admin queue" would also have passed against an empty queue and
+  thus proven nothing. The test now first creates a change with a unique marker text and
+  additionally checks for its absence.
+- The CSRF test only checked that the target page stayed unchanged — that would also
+  have been true for an approve that failed for some other reason. It now additionally
+  checks that the change is still `pending`.
 
-## Über den ganzen Projektverlauf gefundene echte Fehler
+## Real bugs found over the course of the whole project
 
-Zur Erinnerung, weil sie zeigen, wo die Fallstricke in diesem Umfeld liegen —
-alle behoben und durch Tests abgesichert:
+A reminder, because they show where the pitfalls in this environment lie — all fixed
+and covered by tests:
 
-1. **Verwaister Seiten-Lock** nach abgefangenem Remote-Save: `martin` wurde aus
-   genau den Seiten ausgesperrt, an denen der Agent arbeitete.
-2. **Freigegebene Seiten landeten nicht im Suchindex** — live, aber unauffindbar.
-3. **`Diff3::mergedOutput()` ist in Kaos defekt** (Zugriff auf `protected`
-   Properties); zusätzlich fehlt `Diff3` in DokuWikis Autoload-Map.
-4. **Basistext aus dem Attic ist unzuverlässig** (Sekundengranularität der
-   Revisionen) — wird jetzt mitgespeichert.
-5. **`$conf['savedir']` ist ein relativer Pfad**, der je nach Einstiegsskript
-   anders auflöst.
-6. **Mehrzeilige Docblock-Tags** zerstören die generierten MCP-Tool-Beschreibungen.
-7. **ACL-Umgehung über die Queue** durch Reviewer ohne Leserecht.
+1. **Orphaned page lock** after an intercepted remote save: `martin` was locked out of
+   exactly the pages the agent was working on.
+2. **Approved pages didn't land in the search index** — live, but unfindable.
+3. **`Diff3::mergedOutput()` is broken in Kaos** (accesses `protected` properties);
+   additionally, `Diff3` is missing from DokuWiki's autoload map.
+4. **Base text from the attic is unreliable** (second-level granularity of revisions) —
+   now stored alongside instead.
+5. **`$conf['savedir']` is a relative path** that resolves differently depending on the
+   entry script.
+6. **Multi-line docblock tags** break the generated MCP tool descriptions.
+7. **ACL bypass via the queue** by reviewers without read access.
 
-## Bewusst offen
+## Knowingly left open
 
-- **`replaySave()` setzt `REMOTE_USER`, nicht `$USERINFO`.** Für Attribution,
-  Changelog und Benachrichtigungen verifiziert korrekt. Ein Fremdplugin, das in
-  `COMMON_WIKIPAGE_SAVE` auf `$USERINFO['grps']` schaut, sähe während der
-  Freigabe die Gruppen des Reviewers. Kein bekannter Fall; eine Korrektur würde
-  bedeuten, den kompletten Benutzerkontext zu tauschen, was neue Risiken schafft.
-- **Kein PHPUnit.** Die Logik ist fast durchgehend Integrationsverhalten gegen
-  DokuWiki-Interna; die End-to-End-Tests decken sie realitätsnäher ab. Für reine
-  Einheiten (`helper/merge.php`) wären Unit-Tests sinnvoll, falls die
-  Merge-Logik wächst — `_test/` wird von DokuWikis Harness automatisch gefunden.
-- **Keine Behandlung von Seiten-Umbenennungen** durch das `move`-Plugin. Wird
-  eine Seite umbenannt, während eine Änderung für sie offen ist, zielt diese
-  weiterhin auf die alte ID und wird bei der Freigabe als Neuanlage behandelt.
-  Sauber wäre ein Hook auf `PLUGIN_MOVE_PAGE_RENAME`; das setzt aber voraus,
-  dass das `move`-Plugin überhaupt installiert ist, und war nie Teil des Umfangs.
-- **Kompatibilität nur mit 2024-02-06b** verifiziert. Die genutzten Hooks
-  existieren in 2025-05-14 und 2026-07-14 unverändert, aber der `Diff3`-Defekt
-  könnte dort behoben sein — die Umgehung ist darauf vorbereitet, ein Testlauf
-  gegen eine neuere Version stünde aber noch aus.
+- **`replaySave()` sets `REMOTE_USER`, not `$USERINFO`.** Verified correct for
+  attribution, changelog, and notifications. A third-party plugin that looks at
+  `$USERINFO['grps']` in `COMMON_WIKIPAGE_SAVE` would see the reviewer's groups during
+  the approval. No known case; a fix would mean swapping the entire user context, which
+  creates new risks.
+- **No PHPUnit.** The logic is almost entirely integration behavior against DokuWiki
+  internals; the end-to-end tests cover it more realistically. For pure units
+  (`helper/merge.php`) unit tests would make sense should the merge logic grow —
+  `_test/` is auto-discovered by DokuWiki's harness.
+- **No handling of page renames** by the `move` plugin. If a page is renamed while a
+  change is open for it, the change still targets the old ID and is treated as a new
+  creation on approval. The clean fix would be a hook on `PLUGIN_MOVE_PAGE_RENAME`; but
+  that assumes the `move` plugin is even installed, and was never part of the scope.
+- **Compatibility verified only with 2024-02-06b.** The hooks used exist unchanged in
+  2025-05-14 and 2026-07-14, but the `Diff3` defect might be fixed there — the
+  workaround is prepared for that, but a test run against a newer version is still
+  outstanding.

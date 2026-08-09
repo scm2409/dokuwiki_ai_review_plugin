@@ -1,77 +1,74 @@
-# Audit: Kann ein reviewpflichtiges Konto etwas direkt ändern?
+# Audit: can a review-required account change anything directly?
 
-Anlass: die Frage, ob `kail` Änderungen am Wiki vornehmen kann, die kein Review
-durchlaufen — mit `move` (Seiten umbenennen) als genanntem Beispiel für eine
-Operation, die sich nicht sinnvoll reviewen lässt und die das Konto deshalb gar
-nicht erst ausführen können soll.
+Reason: the question of whether `kail` can make changes to the wiki that don't go
+through review — with `move` (renaming pages) named as an example of an operation that
+can't meaningfully be reviewed, and that the account therefore shouldn't be able to
+perform at all.
 
-Vorgehen: **jede** Methode der Remote-API durchgegangen (nicht nur die als MCP-Tool
-sichtbaren), dazu die Browser-Aktionen. Ergebnisse gegen den laufenden Container
-verifiziert, nicht aus dem Quelltext geschlossen.
+Approach: went through **every** remote API method (not just the ones visible as MCP
+tools), plus the browser actions. Results verified against the running container, not
+inferred from the source code.
 
-## Ergebnis je Schreibpfad
+## Result per write path
 
-| Pfad | Vorher | Jetzt |
+| Path | Before | Now |
 |---|---|---|
 | `core.savePage`, `core.appendPage` | Queue | Queue |
 | `core.saveMedia` | Queue | Queue |
-| **`core.deleteMedia`** | ⚠️ **ging direkt durch** | Queue |
-| `core.lockPages` / `unlockPages` | nur Sperren, kein Inhalt | unverändert |
-| `core.login` / `logoff` | nur eigene Sitzung | unverändert |
-| `plugin.acl.addAcl` / `delAcl` / `listAcls` | vom ACL-Plugin auf Admins beschränkt | unverändert, jetzt getestet |
-| `plugin.usermanager.createUser` / `deleteUser` | auf Admins beschränkt | unverändert, jetzt getestet |
-| `dokuwiki.createUser` / `deleteUsers` (Legacy) | `auth_isadmin()` | unverändert, jetzt getestet |
-| Browser-Aktionen von Fremdplugins (z. B. `move`) | ⚠️ **liefen ungehindert** | per Allowlist verweigert |
+| **`core.deleteMedia`** | ⚠️ **went through directly** | Queue |
+| `core.lockPages` / `unlockPages` | locks only, no content | unchanged |
+| `core.login` / `logoff` | own session only | unchanged |
+| `plugin.acl.addAcl` / `delAcl` / `listAcls` | restricted to admins by the ACL plugin | unchanged, now tested |
+| `plugin.usermanager.createUser` / `deleteUser` | restricted to admins | unchanged, now tested |
+| `dokuwiki.createUser` / `deleteUsers` (legacy) | `auth_isadmin()` | unchanged, now tested |
+| Browser actions of third-party plugins (e.g. `move`) | ⚠️ **ran unhindered** | denied via allowlist |
 
-## Die beiden geschlossenen Lücken
+## The two closed gaps
 
 ### `core.deleteMedia`
 
-Medien-Löschungen laufen über `media_delete()`, nicht über
-`MEDIA_UPLOAD_FINISH` — der Upload-Hook griff hier also nicht. Ein
-reviewpflichtiges Konto konnte damit Dateien **löschen**, obwohl es keine
-hinzufügen konnte. Nötig ist dafür lediglich `AUTH_DELETE`, das in einer
-üblichen ACL schnell vergeben ist.
+Media deletions go through `media_delete()`, not through `MEDIA_UPLOAD_FINISH` — so the
+upload hook didn't apply here. A review-required account could thus **delete** files,
+even though it couldn't add any. This only requires `AUTH_DELETE`, which is quickly
+granted in a typical ACL.
 
-Jetzt über `MEDIA_DELETE_FILE` (preventable, `inc/media.php:276`) abgefangen und
-als Änderung vom Typ `media` mit `operation = delete` eingereiht. Die Freigabe
-führt die Löschung als ursprünglicher Antragsteller aus. Das Review-UI weist
-deutlich darauf hin, dass eine Freigabe die Datei entfernt.
+Now caught via `MEDIA_DELETE_FILE` (preventable, `inc/media.php:276`) and enqueued as a
+change of type `media` with `operation = delete`. The approval performs the deletion as
+the original requester. The review UI clearly indicates that an approval removes the
+file.
 
-Bewusst gequeued statt blockiert: Löschen ist eine reviewbare Absicht, genau wie
-das Löschen einer Seite (leerer Text), das schon immer durch die Queue lief.
+Deliberately queued instead of blocked: deletion is a reviewable intent, just like
+deleting a page (empty text), which has always gone through the queue.
 
-### Aktionen von Fremdplugins
+### Actions from third-party plugins
 
-Plugins bringen eigene Aktionen mit (`do=…`), die das Wiki verändern, ohne
-`COMMON_WIKIPAGE_SAVE` zu berühren — beim `move`-Plugin etwa das Umbenennen von
-Seiten. Für die Queue gibt es dabei nichts abzufangen.
+Plugins bring their own actions (`do=…`) that change the wiki without touching
+`COMMON_WIKIPAGE_SAVE` — for the `move` plugin, for instance, renaming pages. There is
+nothing for the queue to intercept there.
 
-Statt einzelne bekannte Plugins zu blockieren, gilt für reviewpflichtige Konten
-jetzt eine **Allowlist erlaubter Aktionen** (`action/save.php`): Lesen,
-Navigieren, Bearbeiten und Speichern sind erlaubt, alles andere wird mit
-Hinweis abgewiesen. Damit ist ein erst später installiertes Plugin
-standardmäßig gesperrt statt unbemerkt ungeprüft — das ist die sichere
-Fehlerrichtung. Wird eine zusätzliche Aktion gebraucht, muss sie bewusst in die
-Liste aufgenommen werden.
+Instead of blocking individual known plugins, review-required accounts are now subject
+to an **allowlist of permitted actions** (`action/save.php`): reading, navigating,
+editing, and saving are allowed, everything else is rejected with a notice. That means a
+plugin installed later is locked out by default instead of silently ungoverned — that's
+the safe failure direction. If an additional action is needed, it must be deliberately
+added to the list.
 
-## Was ausdrücklich **nicht** abgedeckt ist
+## What is explicitly **not** covered
 
-**Remote-API-Methoden von Fremdplugins.** Kaos bietet keinen Hook, mit dem sich
-ein Remote-Aufruf abfangen ließe (kein `RPC_CALL`-Event; `Api::call()` ruft die
-Methode direkt auf). Ein installiertes Plugin, das eine schreibende
-`RemotePlugin`-Methode mitbringt und diese *nicht* selbst auf Admin-Rechte
-prüft, wäre für ein reviewpflichtiges Konto erreichbar.
+**Remote API methods from third-party plugins.** Kaos offers no hook that could
+intercept a remote call (no `RPC_CALL` event; `Api::call()` invokes the method
+directly). An installed plugin that brings its own writing `RemotePlugin` method and
+does *not* itself check for admin rights would be reachable by a review-required
+account.
 
-Der Test `lockdown.api.spec.ts` fängt genau das ab: Er vergleicht die Liste
-aller nicht als read-only markierten Remote-Methoden gegen eine Aufstellung, in
-der zu jeder Methode steht, *warum* sie unbedenklich ist. Taucht eine unbekannte
-schreibende Methode auf — durch ein DokuWiki-Update oder ein neu installiertes
-Plugin — schlägt der Test fehl, statt dass die Lücke unbemerkt bleibt.
+The test `lockdown.api.spec.ts` catches exactly this: it compares the list of all
+remote methods not marked read-only against a list where each method states *why* it is
+harmless. If an unknown writing method shows up — through a DokuWiki update or a newly
+installed plugin — the test fails instead of the gap going unnoticed.
 
-Zusätzliche Absicherung im Betrieb, siehe [`../usage.md`](../usage.md):
+Additional operational safeguards, see [`../usage.md`](../usage.md):
 
-- ACL für das reviewpflichtige Konto so eng wie möglich (kein `AUTH_DELETE`,
-  wenn keine Löschungen nötig sind),
-- `$conf['remoteuser']` auf die Konten begrenzen, die die API wirklich brauchen,
-- schreibende Plugins mit eigener Remote-API zurückhaltend installieren.
+- keep the ACL for the review-required account as tight as possible (no `AUTH_DELETE`
+  if deletions aren't needed),
+- restrict `$conf['remoteuser']` to the accounts that actually need the API,
+- be cautious about installing writing plugins that bring their own remote API.

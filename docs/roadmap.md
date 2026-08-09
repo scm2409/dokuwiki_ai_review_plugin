@@ -1,32 +1,32 @@
 # Roadmap
 
-Statusanker über Sessions hinweg. Vor Beginn einer neuen Arbeitssitzung hier lesen.
+Status anchor across sessions. Read this before starting a new work session.
 
-| # | Phase | Status | Branch | Notizen |
+| # | Phase | Status | Branch | Notes |
 |---|---|---|---|---|
-| 0 | Repo-Bootstrap | ✅ erledigt | `main` | git init, Grundgerüst, CLAUDE.md |
-| 1 | Recherche dokumentieren | ✅ erledigt | `main` | existing-plugins.md, kaos-hooks.md |
-| 2 | ADRs + Spec | ✅ erledigt | `main` | ADR-0001..0003, spec.md, testing/strategy.md |
-| 3 | Testumgebung (Podman + Playwright) | ✅ erledigt | `main` | Container läuft, 8/8 Smoke-Tests grün, MCP-Handshake real verifiziert |
-| 4 | Plugin-Kern (Policy, Store, Save-Interception) | ✅ erledigt | `main` | 13/13 Tests grün, alle 3 Pfade (Browser/JSON-RPC/MCP) live verifiziert |
-| 5 | Review-UI (Admin-Queue, Diff, Banner) | ✅ erledigt | `main` | 17/17 Tests grün, kompletter Approve/Reject-Loop live verifiziert |
-| 6 | 3-Wege-Merge / Konflikte | ✅ erledigt | `main` | Diff3-Automerge + manuelle Auflösung; Kaos-Bug in Diff3 umgangen |
-| 7 | Media-Uploads | ✅ erledigt | `main` | Queue + Freigabe, Byte-Integrität getestet |
-| 8 | remote.php + MCP-Verifikation | ✅ erledigt | `main` | vorgezogen wegen ADR-0004; 4 MCP-Tools live verifiziert |
-| 9 | Härtung, Security-Review, Doku | ✅ erledigt | `main` | ACL-Lücke geschlossen, CLI, usage.md, 46 Tests |
+| 0 | Repo bootstrap | ✅ done | `main` | git init, base scaffold, CLAUDE.md |
+| 1 | Document research | ✅ done | `main` | existing-plugins.md, kaos-hooks.md |
+| 2 | ADRs + spec | ✅ done | `main` | ADR-0001..0003, spec.md, testing/strategy.md |
+| 3 | Test environment (Podman + Playwright) | ✅ done | `main` | Container running, 8/8 smoke tests green, MCP handshake actually verified |
+| 4 | Plugin core (policy, store, save interception) | ✅ done | `main` | 13/13 tests green, all 3 paths (browser/JSON-RPC/MCP) verified live |
+| 5 | Review UI (admin queue, diff, banner) | ✅ done | `main` | 17/17 tests green, full approve/reject loop verified live |
+| 6 | 3-way merge / conflicts | ✅ done | `main` | Diff3 automerge + manual resolution; Kaos bug in Diff3 worked around |
+| 7 | Media uploads | ✅ done | `main` | Queue + approval, byte integrity tested |
+| 8 | remote.php + MCP verification | ✅ done | `main` | moved up due to ADR-0004; 4 MCP tools verified live |
+| 9 | Hardening, security review, docs | ✅ done | `main` | ACL gap closed, CLI, usage.md, 46 tests |
 
-Alle geplanten Phasen sind abgeschlossen. Der ursprüngliche Plan liegt unter
+All planned phases are complete. The original plan is located at
 `/home/martin/.claude/plans/ber-neues-projekt-starten-atomic-feigenbaum.md`.
 
-Reviews: [`design/code-review.md`](design/code-review.md) (Zwischenstand),
-[`design/final-review.md`](design/final-review.md) (Abschluss),
-[`testing/coverage-review.md`](testing/coverage-review.md) (Testabdeckung).
-Was bewusst offen blieb, steht im Abschluss-Review.
+Reviews: [`design/code-review.md`](design/code-review.md) (interim state),
+[`design/final-review.md`](design/final-review.md) (final), 
+[`testing/coverage-review.md`](testing/coverage-review.md) (test coverage).
+What was deliberately left open is documented in the final review.
 
-## Entschiedene Fragen
+## Decided questions
 
-- Plugin-Basisname: **`reviewqueue`** (2026-08-08 mit dem Nutzer entschieden — fachlich
-  präziser als `aireview`, da das Plugin benutzerbasiert und nicht KI-spezifisch ist).
-- `martin` bekommt eine eigene `reviewer`-Gruppe statt DokuWiki-Admin-Rechte (sauberere
-  Trennung von "darf Reviews machen" und "ist Wiki-Administrator"); wird in Phase 3 so
-  geseedet.
+- Plugin base name: **`reviewqueue`** (decided with the user on 2026-08-08 — more
+  precise than `aireview`, since the plugin is user-based and not AI-specific).
+- `martin` gets his own `reviewer` group instead of DokuWiki admin rights (cleaner
+  separation between "may perform reviews" and "is wiki administrator"); will be
+  seeded this way in phase 3.

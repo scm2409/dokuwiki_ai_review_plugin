@@ -1,79 +1,82 @@
-# Projektkontext: dokuwiki-plugin-reviewqueue
+# Project context: dokuwiki-plugin-reviewqueue
 
-## Was hier gebaut wird
+## What's being built here
 
-Ein DokuWiki-Plugin (Zielversion: **Release 2024-02-06b "Kaos"**, fest, kein
-Kompatibilitäts-Ziel für neuere Releases), das Speicherungen bestimmter, konfigurierter
-Benutzer/Gruppen nicht direkt live schaltet, sondern in eine Review-Queue stellt. Ein
-Reviewer gibt frei/lehnt ab/bearbeitet vor Freigabe. Motivierender Anwendungsfall ist ein
-KI-Agent mit eigenem DokuWiki-Benutzer (`kail`) über MCP, aber das Plugin selbst ist
-benutzerbasiert und nicht KI-spezifisch.
+A DokuWiki plugin (target version: **Release 2024-02-06b "Kaos"**, fixed, no
+compatibility target for newer releases) that holds back saves from certain configured
+users/groups instead of publishing them live, putting them into a review queue instead.
+A reviewer approves/rejects/edits before release. The motivating use case is an AI agent
+with its own DokuWiki user (`kail`) via MCP, but the plugin itself is user-based and not
+AI-specific.
 
-Der vollständige, freigegebene Plan liegt unter
+The full, approved plan is at
 `/home/martin/.claude/plans/ber-neues-projekt-starten-atomic-feigenbaum.md`.
-**Bei Unklarheiten dort zuerst nachsehen**, bevor Architekturfragen neu aufgerollt werden.
+**Check there first when anything is unclear**, before re-opening architecture questions.
 
-## Feste Entscheidungen (nicht neu diskutieren, außer der Nutzer bringt es auf)
+## Fixed decisions (don't re-discuss unless the user brings it up)
 
-- **Hold-back-Queue**, nicht "save-then-hide". Kein Eingriff in Rendering/Cache/Suche.
-- **Dateibasierter Store** unter `data/reviewqueue/`, keine sqlite-Plugin-Abhängigkeit.
-- Scope: Seiten (Anlage/Änderung/Löschung) + Media-Uploads. Kein Namespace-Filter.
-- KI-Feedback über `RemoteException` + eigene `plugin.reviewqueue.*`-Remote-Methoden
-  (werden vom `mcp`-Plugin automatisch als Tools exponiert).
-- Review-UI: Admin-Seite (Queue+Diff) + Banner auf betroffener Seite. Keine E-Mails,
-  kein Syntax-Block (bewusst zurückgestellt).
-- Konflikte: 3-Wege-Merge via `Diff3` (`inc/DifferenceEngine.php`), bei echtem Konflikt
-  Status `conflicted` + manuelle Auflösung.
-- **Leitprinzip: fail-closed.** Kann die Queue nicht sauber geschrieben werden, wird der
-  Save abgelehnt — niemals durchgelassen. Test dafür ist Pflicht, nicht optional.
-- Test-User (bereits vom Nutzer festgelegt): `martin`/`martin` (normaler Reviewer),
-  `kail`/`kail` (KI/MCP-User, review-pflichtig).
-- E2E-Stack: Playwright gegen einen Podman-Container mit exakt DokuWiki 2024-02-06b.
+- **Hold-back queue**, not "save-then-hide". No intervention in rendering/cache/search.
+- **File-based store** under `data/reviewqueue/`, no sqlite plugin dependency.
+- Scope: pages (create/change/delete) + media uploads. No namespace filter.
+- AI feedback via `RemoteException` + dedicated `plugin.reviewqueue.*` remote methods
+  (automatically exposed as tools by the `mcp` plugin).
+- Review UI: admin page (queue+diff) + banner on the affected page. No emails,
+  no syntax block (deliberately deferred).
+- Conflicts: 3-way merge via `Diff3` (`inc/DifferenceEngine.php`); on a real conflict,
+  status `conflicted` + manual resolution.
+- **Guiding principle: fail-closed.** If the queue can't be written cleanly, the save is
+  rejected — never let it through. A test for this is mandatory, not optional.
+- Test users (already fixed by the user): `martin`/`martin` (regular reviewer),
+  `kail`/`kail` (AI/MCP user, subject to review).
+- E2E stack: Playwright against a Podman container running exactly DokuWiki 2024-02-06b.
 
-## Verifizierte Kaos-Fakten (nicht erneut recherchieren)
+## Verified Kaos facts (don't re-research)
 
-- `COMMON_WIKIPAGE_SAVE` BEFORE ist preventable — `inc/File/PageFile.php:139`. Deckt
-  Browser-UI, XML-RPC, JSON-RPC, MCP, CLI ab. Eventdaten enthalten vollen neuen Seitentext.
-- `MEDIA_UPLOAD_FINISH` ist preventable — `inc/media.php:501`.
-- `ApiCore::savePage()` gibt immer `true` zurück, kein Event zum Umbiegen des
-  Rückgabewerts existiert in Kaos → Feedback an den Caller nur über `RemoteException`.
-- API-Tokens: `dokuwiki\JWT::fromUser($user)->getToken()`, Auth via
+- `COMMON_WIKIPAGE_SAVE` BEFORE is preventable — `inc/File/PageFile.php:139`. Covers
+  browser UI, XML-RPC, JSON-RPC, MCP, CLI. Event data contains the full new page text.
+- `MEDIA_UPLOAD_FINISH` is preventable — `inc/media.php:501`.
+- `ApiCore::savePage()` always returns `true`; no event exists in Kaos to redirect the
+  return value → feedback to the caller only via `RemoteException`.
+- API tokens: `dokuwiki\JWT::fromUser($user)->getToken()`, auth via
   `Authorization: Bearer <token>` — `inc/auth.php:199`.
-- MCP-Plugin: [`splitbrain/dokuwiki-plugin-mcp`](https://github.com/splitbrain/dokuwiki-plugin-mcp),
-  exponiert die gesamte Remote-API automatisch als MCP-Tools über `SchemaGenerator`
-  (`OpenAPIGenerator`-Subklasse). Muss in Phase 8 tatsächlich gegen Kaos verifiziert werden.
-- Referenz-Klon des `approve`-Plugins (Muster für Plugin-Struktur, NICHT für das
-  Review-Modell) lag unter `scratchpad/approve` — beim Recherchieren angelegt, nicht
-  Teil des Repos.
-- **Falle:** `$conf['savedir']` bleibt bei DokuWiki bewusst der rohe, oft relative
-  Config-Wert (`'./data'`). Core löst nur die *abgeleiteten* Pfade (`$conf['datadir']`,
-  `$conf['lockdir']`, …) über `init_path()`/`fullpath()` in `inc/init.php` gegen
-  `DOKU_INC` auf. Eigener Code, der `$conf['savedir']` direkt für Pfade nutzt, schreibt
-  je nach aufrufendem Einstiegsskript (unterschiedliches `cwd`: `doku.php` vs.
-  `lib/exe/jsonrpc.php` vs. `lib/plugins/mcp/mcp.php`) an unterschiedliche, teils falsche
-  Orte. Fix/Konvention im Plugin: `dirname($conf['datadir'])` statt `$conf['savedir']`
-  (siehe `plugin/helper/store.php::dataDir()`).
+- MCP plugin: [`splitbrain/dokuwiki-plugin-mcp`](https://github.com/splitbrain/dokuwiki-plugin-mcp),
+  exposes the entire remote API automatically as MCP tools via `SchemaGenerator`
+  (an `OpenAPIGenerator` subclass). Must actually be verified against Kaos in Phase 8.
+- Reference clone of the `approve` plugin (a pattern for plugin structure, NOT for the
+  review model) lived under `scratchpad/approve` — created during research, not part of
+  the repo.
+- **Trap:** DokuWiki deliberately leaves `$conf['savedir']` as the raw, often relative
+  config value (`'./data'`). Core only resolves the *derived* paths (`$conf['datadir']`,
+  `$conf['lockdir']`, …) against `DOKU_INC` via `init_path()`/`fullpath()` in
+  `inc/init.php`. Custom code that uses `$conf['savedir']` directly for paths writes to
+  different, sometimes wrong, locations depending on the calling entry script (different
+  `cwd`: `doku.php` vs. `lib/exe/jsonrpc.php` vs. `lib/plugins/mcp/mcp.php`). Fix/convention
+  in this plugin: use `dirname($conf['datadir'])` instead of `$conf['savedir']`
+  (see `plugin/helper/store.php::dataDir()`).
 
-## Arbeitsweise in diesem Projekt
+## How we work on this project
 
-- Markdown im Repo ist Single Source of Truth: Recherche in `docs/research/`,
-  Entscheidungen als ADRs in `docs/design/`, Spezifikation in `docs/design/spec.md`,
-  Testkonzept in `docs/testing/strategy.md`, Phasenstatus in `docs/roadmap.md`.
-- **`docs/roadmap.md` vor Beginn einer neuen Session lesen** — dort steht der
-  tatsächliche Fortschritt, nicht nur der Plan.
-- Ein Branch pro Phase, Commit am Phasenende, `/code-review` vor jedem Merge.
-- DokuWiki-Idiome verwenden statt eigener Infrastruktur: `io_saveFile()`, `io_lock()`,
+- Markdown in the repo is the single source of truth: research in `docs/research/`,
+  decisions as ADRs in `docs/design/`, spec in `docs/design/spec.md`, test strategy in
+  `docs/testing/strategy.md`, phase status in `docs/roadmap.md`.
+- **Read `docs/roadmap.md` before starting a new session** — that's where actual
+  progress lives, not just the plan.
+- One branch per phase, commit at the end of each phase, `/code-review` before every
+  merge.
+- Use DokuWiki idioms instead of custom infrastructure: `io_saveFile()`, `io_lock()`,
   `io_unlock()`, `Event`/`Doku_Event`, `AdminPlugin`, `RemotePlugin`, `Diff3`,
-  `TableDiffFormatter`. Nicht neu erfinden, was der Core schon anbietet.
-- Sprache: Code/Kommentare/Commits auf Englisch (DokuWiki-Konvention), Doku im `docs/`-
-  Verzeichnis und Kommunikation mit dem Nutzer auf Deutsch, `lang/de/` und `lang/en/`
-  beide vollständig pflegen.
+  `TableDiffFormatter`. Don't reinvent what core already provides.
+- Language: **everything written into this repository — code, comments, commit
+  messages, and all documentation under `docs/`, `README.md`, etc. — is English,
+  no exceptions.** This applies regardless of what language we're chatting in;
+  chat with the user may switch to German at times, but written artifacts in the repo
+  never do. The one deliberate exception is `plugin/lang/de/`, DokuWiki's own German
+  UI translation for end users — keep `lang/de/` and `lang/en/` both fully maintained.
 
-## Testumgebung
+## Test environment
 
-DokuWiki 2024-02-06b läuft in einem Podman-Container (`test/env/`), gebaut aus dem
-offiziellen Tarball, nicht aus einem Docker-Hub-Image, für deterministisches Seeding.
-`test/env/up.sh` erzeugt bei jedem Lauf einen frischen `data/`-Stand. Playwright-Tests
-in `test/e2e/` nutzen getrennte Storage-States für `martin` und `kail` und decken sowohl
-den Browser-Pfad als auch den JSON-RPC/MCP-Pfad ab. Die vollständige Szenarienliste
-(17 Szenarien) steht in `docs/testing/strategy.md`.
+DokuWiki 2024-02-06b runs in a Podman container (`test/env/`), built from the official
+tarball rather than a Docker Hub image, for deterministic seeding. `test/env/up.sh`
+produces a fresh `data/` state on every run. Playwright tests in `test/e2e/` use separate
+storage states for `martin` and `kail` and cover both the browser path and the
+JSON-RPC/MCP path. The full scenario list (17 scenarios) is in `docs/testing/strategy.md`.

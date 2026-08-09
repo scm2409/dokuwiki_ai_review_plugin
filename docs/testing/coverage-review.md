@@ -1,73 +1,73 @@
-# Review der Testabdeckung (2026-08-08)
+# Test coverage review (2026-08-08)
 
-Abgleich der vorhandenen Playwright-Tests gegen die Szenarienmatrix in
-[`strategy.md`](strategy.md). Ergebnis des Reviews, den der Nutzer angefordert hat.
+Comparison of the existing Playwright tests against the scenario matrix in
+[`strategy.md`](strategy.md). Result of the review the user requested.
 
-## Befund
+## Findings
 
-| # | Szenario | Status vor Review | Maßnahme |
+| # | Scenario | Status before review | Action |
 |---|---|---|---|
-| 1 | Neue Seite → Freigabe → live | teilweise — Freigabe getestet, **Autorenzuweisung an `kail` nicht** | Test ergänzt |
-| 2 | Seite ändern → live-Inhalt unverändert | ✅ | — |
-| 3 | Löschung → Freigabe → gelöscht | ❌ **gar nicht getestet** | Test ergänzt |
-| 4 | Media-Upload | ❌ nicht implementiert (Phase 7) | offen, bewusst |
-| 5 | Ablehnung mit Begründung, abrufbar | ✅ | — |
-| 6 | Zwei Änderungen, sequentielle Freigabe | teilweise — Warnung getestet, **zweite Freigabe nicht** | Test ergänzt |
-| 7 | `martin` editiert → sofort live | ✅ | — |
-| 8 | `martin` löscht / Section-Edit | ❌ nicht getestet | Test ergänzt (Löschung) |
-| 9 | `review_users` leer → auch `kail` schreibt direkt | ❌ **gar nicht getestet** | Test ergänzt |
-| 10 | Automerge disjunkter Änderungen | ❌ nicht implementiert (Phase 6) | offen, bewusst |
-| 11 | Konflikt → `conflicted` | ❌ **implementiert, aber ungetestet** | Test ergänzt |
-| 12 | MCP `tools/list` enthält `plugin_reviewqueue_*` | ❌ nur manuell geprüft | Test ergänzt |
-| 13 | `martin` über MCP → geht durch | ❌ nicht getestet | Test ergänzt |
-| 14 | Selbst-Freigabe verboten | ❌ **gar nicht getestet** (Sicherheit!) | Test ergänzt |
-| 15 | Nicht-Reviewer kein Zugriff | ✅ | — |
+| 1 | New page → approval → live | partial — approval tested, **author attribution to `kail` not tested** | Test added |
+| 2 | Edit page → live content unchanged | ✅ | — |
+| 3 | Deletion → approval → deleted | ❌ **not tested at all** | Test added |
+| 4 | Media upload | ❌ not implemented (phase 7) | open, deliberately |
+| 5 | Rejection with reason, retrievable | ✅ | — |
+| 6 | Two changes, sequential approval | partial — warning tested, **second approval not** | Test added |
+| 7 | `martin` edits → immediately live | ✅ | — |
+| 8 | `martin` deletes / section edit | ❌ not tested | Test added (deletion) |
+| 9 | `review_users` empty → `kail` also writes directly | ❌ **not tested at all** | Test added |
+| 10 | Automerge of disjoint changes | ❌ not implemented (phase 6) | open, deliberately |
+| 11 | Conflict → `conflicted` | ❌ **implemented but untested** | Test added |
+| 12 | MCP `tools/list` contains `plugin_reviewqueue_*` | ❌ only checked manually | Test added |
+| 13 | `martin` via MCP → goes through | ❌ not tested | Test added |
+| 14 | Self-approval forbidden | ❌ **not tested at all** (security!) | Test added |
+| 15 | Non-reviewer has no access | ✅ | — |
 | 16 | CSRF | ✅ | — |
-| 17 | Fail-closed | ❌ **gar nicht getestet**, obwohl in `CLAUDE.md` als „Pflicht, nicht optional" deklariert | Test ergänzt |
+| 17 | Fail-closed | ❌ **not tested at all**, even though `CLAUDE.md` declares it "mandatory, not optional" | Test added |
 
-## Bewertung
+## Assessment
 
-Die Lücken lagen systematisch dort, wo ich beim Bauen **manuell** verifiziert und
-das Ergebnis gesehen hatte (Autorenzuweisung, MCP-Tool-Liste, Löschung) — die
-Bestätigung am Terminal hat den fehlenden Test verdeckt. Sicherheitsrelevant und
-besonders unangenehm waren drei davon:
+The gaps systematically occurred exactly where I had verified **manually** while
+building and seen the result (author attribution, MCP tool list, deletion) — the
+confirmation on the terminal masked the missing test. Three of them were
+security-relevant and particularly uncomfortable:
 
-- **Selbst-Freigabe (14)** war ungetestet, obwohl es die Kernabsicherung gegen
-  einen Agenten ist, der seine eigenen Änderungen durchwinkt.
-- **Fail-closed (17)** war ungetestet, obwohl es das ausdrücklich formulierte
-  Leitprinzip des Projekts ist.
-- **`conflicted` (11)** ist bereits ausgeführter Code (`helper/apply.php`
-  vergleicht `baseHash`) — ungetesteter, aber aktiver Code ist schlechter als
-  noch nicht geschriebener.
+- **Self-approval (14)** was untested, even though it's the core safeguard against
+  an agent waving through its own changes.
+- **Fail-closed (17)** was untested, even though it's the project's explicitly
+  stated guiding principle.
+- **`conflicted` (11)** is already executed code (`helper/apply.php`
+  compares `baseHash`) — untested but active code is worse than
+  code not yet written.
 
-`review_users` leer (9) ist der Test, der die eigentliche Projektanforderung
-belegt — dass die Review-Pflicht rein an der Konfiguration hängt und es keine
-versteckte Sonderbehandlung des Namens `kail` gibt.
+`review_users` empty (9) is the test that substantiates the actual project
+requirement — that the review obligation depends purely on configuration and
+there is no hidden special-casing of the name `kail`.
 
-## Nachtrag nach Abschluss von Phase 6, 7 und 9
+## Addendum after completing phases 6, 7, and 9
 
-Die zum Zeitpunkt des ersten Reviews noch offenen Szenarien sind inzwischen
-implementiert **und** getestet:
+The scenarios still open at the time of the first review have since been
+implemented **and** tested:
 
-| # | Szenario | Test |
+| # | Scenario | Test |
 |---|---|---|
-| 4 | Media-Upload → Freigabe | `media.martin.spec.ts` — inkl. sha256-Vergleich der ausgelieferten Datei gegen das Original, damit eine Beschädigung von Binärdaten nicht stillschweigend durchgeht |
-| 8 | `martin` lädt Medien hoch | `media.martin.spec.ts` |
-| 10 | Automerge disjunkter Änderungen | `merge.martin.spec.ts` |
-| 11 | Konflikt → manuelle Auflösung | `merge.martin.spec.ts` — inkl. Ablehnung von Text, der noch Konfliktmarker enthält |
-| — | ACL-Isolation (Befund A aus dem Code-Review) | `acl.martin.spec.ts` — mit echtem, restriktivem Namespace statt der freizügigen Test-ACL |
+| 4 | Media upload → approval | `media.martin.spec.ts` — including a sha256 comparison of the delivered file against the original, so that binary data corruption doesn't silently slip through |
+| 8 | `martin` uploads media | `media.martin.spec.ts` |
+| 10 | Automerge of disjoint changes | `merge.martin.spec.ts` |
+| 11 | Conflict → manual resolution | `merge.martin.spec.ts` — including rejection of text that still contains conflict markers |
+| — | ACL isolation (finding A from the code review) | `acl.martin.spec.ts` — with a real, restrictive namespace instead of the permissive test ACL |
 
-Zusätzlich beim Abschlussreview zwei Tests nachgeschärft, die falsch-positiv
-bestehen konnten:
+Two additional tests were sharpened during the final review because they
+could pass falsely:
 
-- „kail sieht die Admin-Queue nicht" hätte auch bei **leerer** Queue bestanden.
-  Der Test legt jetzt erst eine Änderung mit eindeutigem Markertext an.
-- Der CSRF-Test prüfte nur, dass die Seite unverändert ist — das wäre auch bei
-  einem aus ganz anderen Gründen fehlgeschlagenen Approve der Fall. Er prüft
-  jetzt zusätzlich, dass die Änderung noch `pending` ist.
+- "kail doesn't see the admin queue" would also have passed with an **empty**
+  queue. The test now creates a change with distinct marker text first.
+- The CSRF test only checked that the page was unchanged — that would also
+  hold for an approve that failed for entirely different reasons. It now
+  additionally checks that the change is still `pending`.
 
-## Nicht behoben (bewusst)
-- Szenario 8 „Section-Edit" ist nur indirekt abgedeckt: `COMMON_WIKIPAGE_SAVE`
-  bekommt laut [`kaos-hooks.md`](../research/kaos-hooks.md) immer den
-  vollständigen Seitentext, Section-Edits sind daher kein Sonderfall im
-  Plugin-Code. Ein eigener Test wäre reine Zeremonie.
+## Not fixed (deliberately)
+- Scenario 8 "section edit" is only indirectly covered: per
+  [`kaos-hooks.md`](../research/kaos-hooks.md), `COMMON_WIKIPAGE_SAVE`
+  always receives the complete page text, so section edits are not a
+  special case in the plugin code. A dedicated test would be pure ceremony.

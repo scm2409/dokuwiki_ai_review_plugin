@@ -1,141 +1,141 @@
-# Verifizierte DokuWiki-Kaos-Hook-Punkte (Release 2024-02-06b)
+# Verified DokuWiki Kaos hook points (release 2024-02-06b)
 
-Alle Angaben gegen den Git-Tag `release-2024-02-06b` im offiziellen Repo
-<https://github.com/splitbrain/dokuwiki> geprüft (Commit `aad0b49e48318eb343208b2c865291716c1819b3`).
-Ein lokaler Klon liegt zu Referenzzwecken (nicht Teil des Repos) unter `scratchpad/kaos/`.
+All findings verified against the git tag `release-2024-02-06b` in the official repo
+<https://github.com/splitbrain/dokuwiki> (commit `aad0b49e48318eb343208b2c865291716c1819b3`).
+A local clone is kept for reference purposes (not part of the repo) under `scratchpad/kaos/`.
 
-## Seiten speichern: `COMMON_WIKIPAGE_SAVE`
+## Saving pages: `COMMON_WIKIPAGE_SAVE`
 
-Zentrale Funktion `saveWikiText()` in `inc/common.php:1296` delegiert an
-`PageFile::saveWikiText()` in `inc/File/PageFile.php`. Dort (Zeile ~79–139):
+The central function `saveWikiText()` in `inc/common.php:1296` delegates to
+`PageFile::saveWikiText()` in `inc/File/PageFile.php`. There (lines ~79–139):
 
 ```php
 public function saveWikiText($text, $summary, $minor = false)
 {
-    // ... $data zusammenstellen: newContent, changeType, summary, minor, ...
-    $data['page'] = $this; // Event-Handler bekommen Zugriff auf die PageFile-Instanz
+    // ... assemble $data: newContent, changeType, summary, minor, ...
+    $data['page'] = $this; // event handlers get access to the PageFile instance
     $event = new Event('COMMON_WIKIPAGE_SAVE', $data);
     if (!$event->advise_before()) return;   // <-- PREVENTABLE
     if (!$data['contentChanged']) return;
-    // ... schreibt io_writeWikiPage(), legt Attic-Kopie an, Changelog-Eintrag
+    // ... writes io_writeWikiPage(), creates attic copy, changelog entry
     $event->advise_after();
 }
 ```
 
-**Das ist der zentrale Interceptionspunkt.** `$event->preventDefault()` im BEFORE-Handler
-verhindert zuverlässig, dass irgendetwas geschrieben wird — unabhängig davon, ob der Save
-über die Browser-UI, XML-RPC, JSON-RPC, das MCP-Plugin oder ein CLI-Skript ausgelöst wurde,
-weil alle diese Pfade letztlich `saveWikiText()` aufrufen.
+**This is the central interception point.** `$event->preventDefault()` in the BEFORE
+handler reliably prevents anything from being written — regardless of whether the save
+was triggered via the browser UI, XML-RPC, JSON-RPC, the MCP plugin, or a CLI script,
+because all of these paths ultimately call `saveWikiText()`.
 
-Wichtig für die Section-Edit-Korrektheit: `$data['newContent']` enthält bereits den
-**vollständigen** neuen Seitentext (Section-Merging ist vorher passiert), nicht nur den
-geänderten Abschnitt. Die Queue muss daher keine Sonderbehandlung für Section-Edits haben.
+Important for section-edit correctness: `$data['newContent']` already contains the
+**complete** new page text (section merging has already happened), not just the
+changed section. The queue therefore needs no special handling for section edits.
 
-`$data['changeType']` unterscheidet `DOKU_CHANGE_TYPE_CREATE` / `_EDIT` / `_MINOR_EDIT` /
-`_DELETE` / `_REVERT` — Löschungen laufen über denselben Hook (leerer `newContent`).
+`$data['changeType']` distinguishes `DOKU_CHANGE_TYPE_CREATE` / `_EDIT` / `_MINOR_EDIT` /
+`_DELETE` / `_REVERT` — deletions go through the same hook (empty `newContent`).
 
-## Remote-API-Pfad: `ApiCore::savePage()`
+## Remote API path: `ApiCore::savePage()`
 
-`inc/Remote/ApiCore.php:660` (`savePage`) und `:723` (`appendPage`, ruft intern `savePage`
-auf) rufen am Ende schlicht die globale Funktion `saveWikiText($page, $TEXT, $summary,
-$isminor)` auf (Zeile 696) und geben danach hart `return true;` zurück (Zeile 702).
+`inc/Remote/ApiCore.php:660` (`savePage`) and `:723` (`appendPage`, which internally
+calls `savePage`) simply call the global function `saveWikiText($page, $TEXT, $summary,
+$isminor)` at the end (line 696) and then hard-`return true;` afterward (line 702).
 
-**Konsequenz:** Es gibt in Kaos kein Event, mit dem sich der Rückgabewert von
-`core.savePage` nachträglich verändern lässt — `Api::call()` in `inc/Remote/Api.php`
-ruft `$methods[$method]($args)` direkt auf und reicht das Ergebnis unverändert durch, ohne
-einen dazwischenliegenden, preventable Event. Der einzige Weg, den Aufrufer (die KI) zu
-informieren, dass der Save *nicht* live ist, ist eine **Exception** aus dem
-`COMMON_WIKIPAGE_SAVE`-BEFORE-Handler heraus — die propagiert über `Api::call()` bis zum
-JSON-RPC-Server und wird dem Client als Fehler zugestellt (siehe ADR-0003).
+**Consequence:** in Kaos there is no event that can be used to alter the
+return value of `core.savePage` after the fact — `Api::call()` in `inc/Remote/Api.php`
+calls `$methods[$method]($args)` directly and passes the result straight through, without
+an intervening, preventable event. The only way to inform the caller (the AI) that
+the save is *not* live is an **exception** thrown from the
+`COMMON_WIKIPAGE_SAVE` BEFORE handler — it propagates through `Api::call()` up to the
+JSON-RPC server and is delivered to the client as an error (see ADR-0003).
 
-## Media-Uploads: `MEDIA_UPLOAD_FINISH`
+## Media uploads: `MEDIA_UPLOAD_FINISH`
 
-`inc/media.php`, Funktion `media_upload_finish()` (~Zeile 419–501):
+`inc/media.php`, function `media_upload_finish()` (~lines 419–501):
 
 ```php
 // Event data:
 // $data[0] fn_tmp, $data[1] fn, $data[2] id, $data[3] imime,
-// $data[4] overwrite, $data[5] move (Callback-Name für move/copy)
+// $data[4] overwrite, $data[5] move (callback name for move/copy)
 return Event::createAndTrigger('MEDIA_UPLOAD_FINISH', $data, '_media_upload_action', true);
 ```
 
-`Event::createAndTrigger()` mit `$canPreventDefault = true` (letztes Argument) — ebenfalls
-preventable. Für die Queue muss die temporäre Datei (`$data[0]`) vor dem Verwerfen des
-Requests kopiert werden, da DokuWiki sie danach aufräumt.
+`Event::createAndTrigger()` with `$canPreventDefault = true` (last argument) — also
+preventable. For the queue, the temporary file (`$data[0]`) needs to be copied before
+the request is discarded, since DokuWiki cleans it up afterward.
 
-## Diff / 3-Wege-Merge: `Diff3`
+## Diff / 3-way merge: `Diff3`
 
-`inc/DifferenceEngine.php:1319` — `class Diff3 extends Diff`. Nimmt drei Textarrays
-(Basis, "mine", "yours") und liefert Konfliktblöcke bzw. den gemergten Text.
-Darstellung über `TableDiffFormatter` (Zeile 1120) und `InlineDiffFormatter` (Zeile 1234)
-in derselben Datei — dieselben Klassen, die DokuWikis eigene Revisions-/Diff-Ansicht
-(`inc/Ui/Diff.php`, `inc/Ui/PageDiff.php`) nutzt.
+`inc/DifferenceEngine.php:1319` — `class Diff3 extends Diff`. Takes three text arrays
+(base, "mine", "yours") and returns conflict blocks or the merged text.
+Rendering via `TableDiffFormatter` (line 1120) and `InlineDiffFormatter` (line 1234)
+in the same file — the same classes DokuWiki's own revision/diff view
+(`inc/Ui/Diff.php`, `inc/Ui/PageDiff.php`) uses.
 
-## API-Token / Authentifizierung
+## API token / authentication
 
-- `dokuwiki\JWT` (`inc/JWT.php`): `JWT::fromUser($user)` erzeugt ein Token-Objekt,
-  `->getToken()` liefert den String. Im Benutzerprofil (`inc/Ui/UserProfile.php:172`)
-  über `do=authtoken` erreichbar — heißt: **auch per PHP-CLI-Skript generierbar**, was für
-  automatisiertes Seeding im Testcontainer wichtig ist.
-- `inc/auth.php:199` (`auth_tokenlogin()`): akzeptiert `Authorization: Bearer <token>`
-  (und laut MCP-Plugin-Code zusätzlich einen `X-DOKUWIKI-TOKEN`-Header).
-- `conf/dokuwiki.php:68-70`: `$conf['remote']` muss `1` sein, `$conf['remoteuser']` steuert,
-  wer die Remote-API überhaupt nutzen darf (leer = alle).
+- `dokuwiki\JWT` (`inc/JWT.php`): `JWT::fromUser($user)` creates a token object,
+  `->getToken()` returns the string. Reachable in the user profile
+  (`inc/Ui/UserProfile.php:172`) via `do=authtoken` — meaning it **can also be generated
+  via a PHP CLI script**, which is important for automated seeding in the test container.
+- `inc/auth.php:199` (`auth_tokenlogin()`): accepts `Authorization: Bearer <token>`
+  (and, per the MCP plugin code, also an `X-DOKUWIKI-TOKEN` header).
+- `conf/dokuwiki.php:68-70`: `$conf['remote']` must be `1`, `$conf['remoteuser']` controls
+  who is allowed to use the remote API at all (empty = everyone).
 
-## `mcp`-Plugin (Andreas Gohr, `splitbrain/dokuwiki-plugin-mcp`)
+## `mcp` plugin (Andreas Gohr, `splitbrain/dokuwiki-plugin-mcp`)
 
-- `mcp.php` (Einstiegspunkt) instanziiert `McpServer` (extends `JsonRpcServer`) und ruft
-  `->serve()`. Fehler werden über `returnError()` in eine MCP-konforme Fehlerantwort
-  übersetzt.
-- `McpServer::mcpToolsList()` liefert `SchemaGenerator::getTools()` — generiert
-  automatisch **aus jeder registrierten Remote-API-Methode** (Core + alle
-  `RemotePlugin`-Implementierungen) ein MCP-Tool, inklusive JSON-Schema aus
-  `OpenAPIGenerator::getMethodArguments()`. Das heißt: sobald unser `remote.php`
-  (Phase 8) `RemotePlugin` implementiert, tauchen `plugin.reviewqueue.*`-Methoden
-  automatisch als MCP-Tools auf — **ohne** Änderung am `mcp`-Plugin.
-- Abhängigkeiten von `McpServer`/`SchemaGenerator` gegen Kaos geprüft: `ApiCall`,
+- `mcp.php` (entry point) instantiates `McpServer` (extends `JsonRpcServer`) and calls
+  `->serve()`. Errors are translated into an MCP-conformant error response via
+  `returnError()`.
+- `McpServer::mcpToolsList()` returns `SchemaGenerator::getTools()` — automatically
+  generates an MCP tool **from every registered remote API method** (core plus all
+  `RemotePlugin` implementations), including a JSON schema from
+  `OpenAPIGenerator::getMethodArguments()`. This means that as soon as our `remote.php`
+  (phase 8) implements `RemotePlugin`, the `plugin.reviewqueue.*` methods
+  automatically appear as MCP tools — **without** any change to the `mcp` plugin.
+- Dependencies of `McpServer`/`SchemaGenerator` checked against Kaos: `ApiCall`,
   `ApiCall::getCategory()`, `::getSummary()`, `::getArgs()`, `JsonRpcServer`,
   `AccessDeniedException`, `RemoteException`, `OpenAPIGenerator::getMethodArguments()`
-  — alle in `inc/Remote/` bzw. `inc/Remote/OpenApiDoc/` von Kaos vorhanden. Der Plugin-Code
-  selbst benötigt keine erkennbaren Kaos-inkompatiblen Sprachfeatures. **Muss in Phase 8
-  dennoch tatsächlich im Container verifiziert werden** — statische Prüfung ersetzt keinen
-  Lauftest.
-- `plugin.info.txt` des mcp-Plugins ist auf `2026-08-04` datiert (neuer als Kaos selbst)
-  — Grund mehr, es in Phase 8 gegen Kaos tatsächlich zu testen statt nur zu vertrauen.
+  — all present in Kaos's `inc/Remote/` resp. `inc/Remote/OpenApiDoc/`. The plugin code
+  itself doesn't appear to require any Kaos-incompatible language features. **Still needs
+  to be actually verified in the container in phase 8** — static checking is no substitute
+  for a live test run.
+- The mcp plugin's `plugin.info.txt` is dated `2026-08-04` (newer than Kaos itself)
+  — one more reason to actually test it against Kaos in phase 8 instead of just trusting it.
 
-## Weitere für später relevante Fundstellen
+## Other findings relevant for later
 
-- `inc/Extension/RemotePlugin.php`, `AdminPlugin.php` — Basis-Interfaces für `remote.php`
-  bzw. `admin.php` unseres Plugins.
-- `inc/Ui/PageConflict.php`, `inc/Ui/PageDraft.php` — DokuWiki-eigene UI-Bausteine für
-  Konflikt- bzw. Entwurfsanzeige, ggf. als Vorlage für unsere Review-Editor-Ansicht bei
-  `conflicted`-Status.
-- `_test/phpunit.xml` sammelt automatisch `../lib/plugins/*/_test/` ein — falls PHPUnit
-  später ergänzt wird (siehe Nicht-Ziel in der Roadmap), braucht unser Plugin dafür nur
-  ein `_test/`-Verzeichnis, keine weitere Konfiguration.
+- `inc/Extension/RemotePlugin.php`, `AdminPlugin.php` — base interfaces for our plugin's
+  `remote.php` resp. `admin.php`.
+- `inc/Ui/PageConflict.php`, `inc/Ui/PageDraft.php` — DokuWiki's own UI building blocks
+  for conflict resp. draft display, possibly usable as a template for our review editor
+  view for `conflicted` status.
+- `_test/phpunit.xml` automatically picks up `../lib/plugins/*/_test/` — should PHPUnit
+  be added later (see non-goal in the roadmap), our plugin only needs an
+  `_test/` directory for that, no further configuration.
 
-## Bug in Kaos: `Diff3::mergedOutput()` ist unbenutzbar
+## Bug in Kaos: `Diff3::mergedOutput()` is unusable
 
-Beim Umsetzen des 3-Wege-Merges (Phase 6) gefunden. `Diff3::mergedOutput()`
-(`inc/DifferenceEngine.php:1357`) greift im Konfliktzweig direkt auf
-`$edit->final1` / `$edit->final2` zu, doch diese Properties sind auf `_Diff3_Op`
-als `protected` deklariert (Zeile 1458 ff.). Sobald tatsächlich ein Konflikt
-auftritt, endet der Aufruf in einem Fatal Error:
+Found while implementing the 3-way merge (phase 6). `Diff3::mergedOutput()`
+(`inc/DifferenceEngine.php:1357`) accesses `$edit->final1` / `$edit->final2`
+directly in the conflict branch, but these properties are declared `protected`
+on `_Diff3_Op` (line 1458 ff.). As soon as an actual conflict
+occurs, the call ends in a fatal error:
 
 ```
 Error: Cannot access protected property _Diff3_Op::$final1
 ```
 
-Bei konfliktfreien Merges passiert das nicht, weil dort nur das öffentliche
-`merged()` verwendet wird — der Automerge-Pfad funktioniert also.
+This doesn't happen for conflict-free merges, because only the public
+`merged()` is used there — the automerge path does work.
 
-Der Core ruft `mergedOutput()` nirgends auf; `Diff3` fehlt sogar in der
-Autoload-Map (`inc/load.php:45-47` listet nur `Diff`, `UnifiedDiffFormatter`
-und `TableDiffFormatter`), weshalb die Klasse ohne explizites
-`require_once(DOKU_INC . 'inc/DifferenceEngine.php')` gar nicht erst geladen
-wird. Deshalb ist der Defekt upstream nie aufgefallen.
+The core never calls `mergedOutput()` anywhere; `Diff3` isn't even listed in the
+autoload map (`inc/load.php:45-47` only lists `Diff`, `UnifiedDiffFormatter`,
+and `TableDiffFormatter`), which is why the class doesn't get loaded at all
+without an explicit `require_once(DOKU_INC . 'inc/DifferenceEngine.php')`.
+That's why the defect was never noticed upstream.
 
-Umgehung im Plugin (`helper/merge.php`): die Edit-Liste selbst durchlaufen
-(`$diff3->_edits`, `isConflict()` und `merged()` sind öffentlich zugänglich)
-und die beiden Konfliktseiten per Reflection lesen. Das bleibt auch dann
-funktionsfähig, wenn eine spätere DokuWiki-Version die Sichtbarkeit korrigiert.
+Workaround in the plugin (`helper/merge.php`): iterate the edit list itself
+(`$diff3->_edits`, `isConflict()` and `merged()` are publicly accessible)
+and read both conflict sides via reflection. This keeps working even if a
+later DokuWiki version fixes the visibility.

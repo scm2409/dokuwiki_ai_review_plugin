@@ -1,44 +1,44 @@
-# Agent-Skill für den Review-Workflow
+# Agent skill for the review workflow
 
-[`dokuwiki-reviewqueue/SKILL.md`](dokuwiki-reviewqueue/SKILL.md) erklärt einem
-KI-Agenten, wie er mit einem DokuWiki umgeht, dessen Speicherungen über die
-Review-Queue laufen. Ohne diesen Kontext läuft ein Agent zuverlässig in zwei
-Fallen (siehe [`docs/design/adr-0004-sichtbarkeit-offener-aenderungen.md`](../docs/design/adr-0004-sichtbarkeit-offener-aenderungen.md)):
+[`dokuwiki-reviewqueue/SKILL.md`](dokuwiki-reviewqueue/SKILL.md) explains to an
+AI agent how to work with a DokuWiki whose saves go through the
+review queue. Without this context, an agent reliably falls into two
+traps (see [`docs/design/adr-0004-visibility-of-open-changes.md`](../docs/design/adr-0004-visibility-of-open-changes.md)):
 
-1. Er hält die `RemoteException` beim Speichern für einen Fehlschlag und meldet
-   dem Menschen entweder einen Fehler oder — schlimmer — einen Erfolg, den es
-   nicht gab.
-2. Er liest die Seite mit `core.getPage` zurück, sieht die Live-Fassung ohne
-   seinen Entwurf, hält seine Arbeit für verloren und überschreibt sie beim
-   nächsten Speichern selbst.
+1. It takes the `RemoteException` on save for a failure and reports
+   either an error to the human or — worse — a success that
+   didn't happen.
+2. It reads the page back with `core.getPage`, sees the live version without
+   its draft, considers its work lost, and overwrites it itself on the
+   next save.
 
 ## Installation
 
-Der Skill ist ein normaler Claude-Skill (Verzeichnis mit `SKILL.md` und
-YAML-Frontmatter). Verzeichnis dorthin kopieren oder verlinken, wo der Agent
-seine Skills sucht — bei Claude Code z. B.:
+The skill is a normal Claude skill (a directory with `SKILL.md` and
+YAML frontmatter). Copy or link the directory to wherever the agent
+looks for its skills — for Claude Code, for example:
 
 ```bash
 cp -r skills/dokuwiki-reviewqueue ~/.claude/skills/
 ```
 
-Projektweit statt global: nach `.claude/skills/` im jeweiligen Projekt.
+Project-wide instead of global: to `.claude/skills/` in the respective project.
 
-## Voraussetzungen
+## Prerequisites
 
-Der Agent braucht Zugriff auf das DokuWiki-MCP-Plugin
+The agent needs access to the DokuWiki MCP plugin
 ([`splitbrain/dokuwiki-plugin-mcp`](https://github.com/splitbrain/dokuwiki-plugin-mcp))
-mit einem API-Token des reviewpflichtigen Kontos. Über dieses Plugin erscheinen
-die `plugin_reviewqueue_*`-Werkzeuge automatisch als MCP-Tools — dafür ist auf
-der Agentenseite nichts zu konfigurieren.
+with an API token of the account subject to review. Through this plugin, the
+`plugin_reviewqueue_*` tools appear automatically as MCP tools — nothing
+needs to be configured on the agent side for this.
 
-Token erzeugen: im DokuWiki-Benutzerprofil des Kontos, oder per CLI im
-Container (`JWT::fromUser()`, siehe [`test/env/`](../test/env/README.md)).
+Generating a token: in the DokuWiki user profile of the account, or via CLI in
+the container (`JWT::fromUser()`, see [`test/env/`](../test/env/README.md)).
 
-## Anpassen
+## Customizing
 
-Der Skill ist bewusst kontonneutral formuliert — er beschreibt „dein Konto ist
-reviewpflichtig", nicht speziell `kail`. Wenn dein Agent zusätzlichen Kontext
-braucht (Wiki-URL, Namespace-Konventionen, Tonfall der Inhalte), ergänze das in
-einem eigenen Skill oder in der Projekt-`CLAUDE.md`, statt diesen hier
-aufzublähen — er soll ausschließlich das Review-Protokoll erklären.
+The skill is deliberately worded account-neutral — it describes "your account
+is subject to review", not specifically `kail`. If your agent needs additional
+context (wiki URL, namespace conventions, content tone), add that in
+a separate skill or in the project's `CLAUDE.md`, rather than bloating this
+one — it is meant to explain only the review protocol.
