@@ -1,5 +1,7 @@
 # dokuwiki-plugin-reviewqueue
 
+**This project is vibe coded.**
+
 A DokuWiki plugin that doesn't put changes from certain users (typically an AI agent
 with its own wiki account and MCP access) live directly, but instead places them in a
 review queue. A human with reviewer rights sees the change as a diff and approves,
