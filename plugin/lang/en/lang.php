@@ -32,6 +32,10 @@ $lang['btn_resolve']   = 'Publish resolved text';
 $lang['markers_left']  = 'The text still contains conflict markers. Remove them and keep only the wording the page should have.';
 $lang['no_base']       = 'The revision this change was written against is no longer available, so it cannot be merged automatically. Below is the proposed text on its own - compare it against the current page yourself.';
 
+$lang['diff_label']     = 'Diff';
+$lang['preview_label']  = 'Preview';
+$lang['preview_delete'] = 'This change proposes DELETING the page. Approving it removes the page from the wiki.';
+
 $lang['media_info']      = 'Uploaded file: %s, %s.';
 $lang['media_overwrite'] = 'This upload would replace a file that already exists.';
 

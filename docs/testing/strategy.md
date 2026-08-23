@@ -88,6 +88,18 @@ remote API, ACL, rendering) and can only really be verified end-to-end.
 13. Same flow with a token for `martin` → `core_savePage` returns success, page is
     immediately live.
 
+### Reviewer UX
+
+18. The admin queue shows Diff and Preview as tabs (CSS radio-button hack, no
+    JS) per pending page change; only one panel is visible at a time, Diff is
+    the default. Preview is rendered read-only via `p_render()` with `$ID`
+    temporarily set to the change's own target (not the admin page) -
+    verified via a relative link that only resolves correctly under that
+    context. Switching tabs does not change the change's state.
+19. A diff line too wide for the page (a single unbroken long word) gets its
+    own horizontal scrollbar (`.reviewqueue-scroll`, `overflow-x: auto`)
+    instead of overflowing the page with no way to reach the rest of it.
+
 ### Security
 
 14. `kail` tries to approve their own pending change via

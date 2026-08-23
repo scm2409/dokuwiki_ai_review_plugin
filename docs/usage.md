@@ -13,10 +13,15 @@ works as usual, but results in a message "submitted for review
 as change #N". The page remains unchanged until someone approves it.
 
 **As a reviewer:** under *Site Tools → Review Queue* you'll find all pending
-changes with diff, approve, and reject buttons. On affected pages a
-notice banner also appears. A rejection should include a reason —
-the text is retrievable by the author via the API and, for an agent, is the
-only chance to do better on the next attempt.
+changes with a Diff/Preview tab pair, plus approve and reject buttons. Diff is
+the default tab; Preview renders the proposed page as it would actually look
+once published — useful when the diff alone doesn't tell you enough about
+layout or formatting — without approving anything; switching tabs has no
+effect on the change's state. A long diff line gets its own horizontal
+scrollbar rather than running off the page. On affected pages a notice banner
+also appears. A rejection should include a reason — the text is retrievable
+by the author via the API and, for an agent, is the only chance to do better
+on the next attempt.
 
 **All other users** notice nothing of the plugin.
 

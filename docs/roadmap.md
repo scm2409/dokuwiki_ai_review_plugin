@@ -18,6 +18,13 @@ Status anchor across sessions. Read this before starting a new work session.
 All planned phases are complete. The original plan is located at
 `/home/martin/.claude/plans/ber-neues-projekt-starten-atomic-feigenbaum.md`.
 
+**Post-completion addition (2026-08-23):** admin queue gained a rendered
+preview per pending page change (`admin.php::renderPreview()`), reviewer-only,
+switchable against the source diff via CSS-only Diff/Preview tabs
+(`renderDiffAndPreview()`, `plugin/style.css`); the diff table also got its
+own horizontal scrollbar for lines wider than the page. See testing strategy
+scenarios 18-19.
+
 Reviews: [`design/code-review.md`](design/code-review.md) (interim state),
 [`design/final-review.md`](design/final-review.md) (final), 
 [`testing/coverage-review.md`](testing/coverage-review.md) (test coverage).

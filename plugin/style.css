@@ -1,0 +1,56 @@
+/* Review queue admin page (admin.php). Auto-loaded by DokuWiki - every
+ * plugin's own style.css is picked up automatically, no registration
+ * needed. */
+
+/* Some content this page shows (the source diff, a rendered preview with a
+ * wide table or code block) can be wider than the page. Its own horizontal
+ * scrollbar keeps that content reachable without the whole page overflowing
+ * sideways. */
+.reviewqueue-scroll {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+/* Diff/Preview tabs: plain CSS via the checkbox/radio hack, no JS. The
+ * radio inputs are visually hidden but stay focusable; each label is bound
+ * to its radio via for=/id= and toggles the matching panel through :checked
+ * + sibling selectors below. */
+.reviewqueue-tabs .reviewqueue-tab-radio {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+
+.reviewqueue-tabs .reviewqueue-tab-label {
+    display: inline-block;
+    padding: .3em 1em;
+    margin: 0 .2em -1px 0;
+    cursor: pointer;
+    border: 1px solid rgba(127, 127, 127, .4);
+    border-bottom: none;
+    border-radius: .3em .3em 0 0;
+    background: rgba(127, 127, 127, .15);
+}
+
+.reviewqueue-tabs .reviewqueue-tab-radio:checked + .reviewqueue-tab-label {
+    background: transparent;
+    border-bottom: 1px solid transparent;
+    font-weight: bold;
+}
+
+.reviewqueue-tabs .reviewqueue-tab-radio:focus-visible + .reviewqueue-tab-label {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+}
+
+.reviewqueue-tabs .reviewqueue-tabpanel {
+    display: none;
+    border: 1px solid rgba(127, 127, 127, .4);
+    padding: .5em;
+}
+
+.reviewqueue-tabs .reviewqueue-tab-radio:nth-of-type(1):checked ~ .reviewqueue-tabpanel-diff,
+.reviewqueue-tabs .reviewqueue-tab-radio:nth-of-type(2):checked ~ .reviewqueue-tabpanel-preview {
+    display: block;
+}

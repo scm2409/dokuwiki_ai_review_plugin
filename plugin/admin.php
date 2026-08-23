@@ -170,7 +170,7 @@ class admin_plugin_reviewqueue extends AdminPlugin
         ) . '</p>';
 
         if ($record['type'] === 'page') {
-            $this->renderDiff($record);
+            $this->renderDiffAndPreview($record);
         } else {
             $this->renderMedia($record);
         }
@@ -254,6 +254,45 @@ class admin_plugin_reviewqueue extends AdminPlugin
         }
     }
 
+    /**
+     * A source diff and a rendered preview answer different questions
+     * ("what changed" vs. "how would it look"), so a reviewer switches
+     * between them rather than scrolling past one to reach the other - CSS
+     * radio-button tabs, no JS needed. Both panels stay in the DOM (just
+     * display:none'd via CSS, see style.css) so this works with core CSS
+     * only and needs no dedicated markup per record beyond a unique
+     * radio-group name; the reviewer's tab choice does not need to persist
+     * across page loads.
+     *
+     * @param array $record
+     */
+    protected function renderDiffAndPreview(array $record)
+    {
+        $id = $record['id'];
+        $diffTab = 'rqtab-diff-' . $id;
+        $previewTab = 'rqtab-preview-' . $id;
+
+        echo '<div class="reviewqueue-tabs">';
+        echo '<input type="radio" class="reviewqueue-tab-radio" name="rqtab-' . $id . '" id="' .
+            $diffTab . '" checked>';
+        echo '<label class="reviewqueue-tab-label" for="' . $diffTab . '">' .
+            hsc($this->getLang('diff_label')) . '</label>';
+        echo '<input type="radio" class="reviewqueue-tab-radio" name="rqtab-' . $id . '" id="' .
+            $previewTab . '">';
+        echo '<label class="reviewqueue-tab-label" for="' . $previewTab . '">' .
+            hsc($this->getLang('preview_label')) . '</label>';
+
+        echo '<div class="reviewqueue-tabpanel reviewqueue-tabpanel-diff">';
+        $this->renderDiff($record);
+        echo '</div>';
+
+        echo '<div class="reviewqueue-tabpanel reviewqueue-tabpanel-preview">';
+        $this->renderPreview($record);
+        echo '</div>';
+
+        echo '</div>';
+    }
+
     protected function renderDiff(array $record)
     {
         $old = explode("\n", rawWiki($record['target']));
@@ -262,7 +301,58 @@ class admin_plugin_reviewqueue extends AdminPlugin
         $diff = new \Diff($old, $new);
         $formatter = new \TableDiffFormatter();
 
-        echo '<table class="diff">' . $formatter->format($diff) . '</table>';
+        // The diff table's columns don't wrap (each is essentially a <pre>
+        // line), so a long line makes the table wider than the page with no
+        // way to reach the rest of it - give it its own horizontal scrollbar
+        // instead of relying on (or overflowing past) the page's.
+        echo '<div class="reviewqueue-scroll"><table class="diff">' .
+            $formatter->format($diff) . '</table></div>';
+    }
+
+    /**
+     * Rendered read-only, on demand, gated by the same isReviewer() check as
+     * the rest of this page - this does not reopen the read-path question
+     * from ADR-0004 (no unreviewed content reaches rendering, search, or any
+     * other author-facing path).
+     */
+    protected function renderPreview(array $record)
+    {
+        $text = $this->store->getContent($record['id']);
+
+        echo '<div class="reviewqueue-scroll reviewqueue-preview-content">';
+        echo $text === '' ? hsc($this->getLang('preview_delete')) : $this->renderAs($record['target'], $text);
+        echo '</div>';
+    }
+
+    /**
+     * Rendering (p_render(), via the xhtml Doku_Renderer) resolves relative
+     * links, media, and includes against the global $ID of the current
+     * request - which here is the admin page ('reviewqueue'), not the page
+     * the pending text actually belongs to. Same fix as helper/apply.php
+     * uses for REMOTE_USER during replaySave(): swap the global for the
+     * duration of the call, always restore it.
+     *
+     * p_render_text() would be the usual one-line shortcut for this, but it
+     * doesn't exist in Kaos (verified against the running container) -
+     * calling p_render() with p_get_instructions() directly is what it
+     * wraps in later DokuWiki releases.
+     *
+     * @param string $target page id the text belongs to
+     * @param string $text wiki text to render
+     * @return string rendered XHTML
+     */
+    protected function renderAs($target, $text)
+    {
+        global $ID;
+
+        $original = $ID;
+        $ID = $target;
+        try {
+            $info = [];
+            return (string) p_render('xhtml', p_get_instructions($text), $info);
+        } finally {
+            $ID = $original;
+        }
     }
 
     protected function renderForm(array $record)

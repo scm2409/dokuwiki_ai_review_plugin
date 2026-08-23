@@ -105,6 +105,14 @@ in the same file — the same classes DokuWiki's own revision/diff view
 
 ## Other findings relevant for later
 
+- `p_render_text($text)` does **not** exist in Kaos (`inc/parserutils.php` only defines
+  `p_wiki_xhtml`, `p_cached_output`, `p_render`, etc. — no `p_render_text`; it's a later
+  DokuWiki release's shortcut). Found while adding the admin queue's rendered preview
+  (`admin.php::renderAs()`). Use `p_render('xhtml', p_get_instructions($text), $info)`
+  directly instead. Also note: `p_render()` uses the global `$ID` to resolve relative
+  links/media/includes, so rendering text that belongs to a page other than the current
+  request's requires temporarily swapping `$ID`, same pattern as swapping `REMOTE_USER`
+  in `helper/apply.php::replaySave()`.
 - `inc/Extension/RemotePlugin.php`, `AdminPlugin.php` — base interfaces for our plugin's
   `remote.php` resp. `admin.php`.
 - `inc/Ui/PageConflict.php`, `inc/Ui/PageDraft.php` — DokuWiki's own UI building blocks
