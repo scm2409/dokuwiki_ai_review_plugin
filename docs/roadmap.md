@@ -14,7 +14,7 @@ Status anchor across sessions. Read this before starting a new work session.
 | 7 | Media uploads | ✅ done | `main` | Queue + approval, byte integrity tested |
 | 8 | remote.php + MCP verification | ✅ done | `main` | moved up due to ADR-0004; 4 MCP tools verified live |
 | 9 | Hardening, security review, docs | ✅ done | `main` | ACL gap closed, CLI, usage.md, 46 tests |
-| 10 | Range-addressed access + author change lifecycle | ✅ done | `phase-10-page-ranges` | ADR-0005/ADR-0006; 12 new remote methods, 77/77 tests green |
+| 10 | Range-addressed access + author change lifecycle | ✅ done | `phase-10-page-ranges` | ADR-0005/ADR-0006; 12 new remote methods, 81/81 tests green |
 
 The original plan (phases 0-9) is located at
 `/home/martin/.claude/plans/ber-neues-projekt-starten-atomic-feigenbaum.md`. Phase 10's

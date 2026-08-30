@@ -99,6 +99,17 @@ resolve. This is a **guard against a stale read**, not a lock: nothing prevents 
 callers from racing past it if both hashes happen to still match at the moment each
 writes.
 
+A section's `hash` (from `getPageOutline`/`getSection`) always covers that heading's own
+text alone, matching its core-compatible byte range - but `replaceSection`/`deleteSection`
+always act on a section *together with* its nested subsections (matching
+`resolveSection()`'s default), so `hash` can never match what they actually check for a
+heading that has any children. `getPageOutline` additionally exposes `hashWithChildren`
+for exactly this: the hash `replaceSection`/`deleteSection`'s `$expect` needs, computed
+once per entry so a caller never has to make a second `getSection` call just to get it.
+Found and fixed during review, before this phase merged - a section with no children has
+`hash === hashWithChildren`, so the distinction is invisible until a page actually has
+nested headings, which most do.
+
 ## Rationale
 
 - **Full text at rest is a firm constraint, not a convenience.** Storing patches would

@@ -240,6 +240,16 @@ class remote_plugin_reviewqueue extends RemotePlugin
                 121
             );
         }
+        if (($record['type'] ?? 'page') !== 'page') {
+            // A media change's payload lives in queue/<id>.media (putMedia()),
+            // not queue/<id>.content - writing $text there would just create
+            // an unused file and stamp a meaningless contentHash on the
+            // record, never actually touching the pending upload.
+            throw new RemoteException(
+                "Change #{$record['id']} is a media change; updatePendingChange only works for pages",
+                131
+            );
+        }
 
         /** @var helper_plugin_reviewqueue_store $store */
         $store = $this->loadHelper('reviewqueue_store');
@@ -332,8 +342,11 @@ class remote_plugin_reviewqueue extends RemotePlugin
      * tool's $expect to detect that the page changed underneath you), "bytes", "lines", and
      * "sections": one entry per heading with "index" (use this to address the section in
      * getSection/replaceSection/etc.), "level", "title", "hid" (its anchor), "range" (byte range
-     * in the page's own section-edit format), "lineStart", "lineEnd", "bytes", "lines", and
-     * "hash" (short hash of that section's text alone).
+     * in the page's own section-edit format), "lineStart", "lineEnd", "bytes", "lines", "hash"
+     * (short hash of that section's own text alone, matching getSection with children=false),
+     * and "hashWithChildren" (short hash including any nested subsections - use THIS as $expect
+     * for replaceSection/deleteSection, which always act on a section together with its
+     * children; "hash" would never match theirs for a heading that has any).
      *
      * @param string $page page id
      * @param string $source one of: auto, live, pending
@@ -571,7 +584,7 @@ class remote_plugin_reviewqueue extends RemotePlugin
      * @param string $page page id
      * @param string $section section index, range, #hid, or heading title, from getPageOutline
      * @param string $text the new text for this section, replacing it entirely (include the heading line to keep it)
-     * @param string $expect the section's "hash" from getSection/getPageOutline; leave empty to skip the check
+     * @param string $expect the section's "hash" from getSection, or "hashWithChildren" from getPageOutline; leave empty to skip the check
      * @param string $summary edit summary
      * @return array the write outcome, see above
      * @throws AccessDeniedException no write access for page
@@ -588,8 +601,6 @@ class remote_plugin_reviewqueue extends RemotePlugin
         $this->checkExpect($match['hash'], $expect, 'section');
 
         $newText = $range->spliceBytes($resolved['text'], $match['byteStart'], $match['byteEnd'], (string) $text);
-        $this->refuseEmptyPage($newText, $page);
-
         return $this->writeEffectiveText($page, $newText, $resolved['pendingId'], $summary);
     }
 
@@ -628,8 +639,6 @@ class remote_plugin_reviewqueue extends RemotePlugin
         $at = $this->insertionPoint($range, $resolved['text'], (string) $anchor, $position);
 
         $newText = $range->spliceBytes($resolved['text'], $at, $at, (string) $text);
-        $this->refuseEmptyPage($newText, $page);
-
         return $this->writeEffectiveText($page, $newText, $resolved['pendingId'], $summary);
     }
 
@@ -646,7 +655,7 @@ class remote_plugin_reviewqueue extends RemotePlugin
      *
      * @param string $page page id
      * @param string $section section index, range, #hid, or heading title, from getPageOutline
-     * @param string $expect the section's "hash" from getSection/getPageOutline; leave empty to skip the check
+     * @param string $expect the section's "hash" from getSection, or "hashWithChildren" from getPageOutline; leave empty to skip the check
      * @param string $summary edit summary
      * @return array the write outcome, see replaceSection
      * @throws AccessDeniedException no write access for page
@@ -663,8 +672,6 @@ class remote_plugin_reviewqueue extends RemotePlugin
         $this->checkExpect($match['hash'], $expect, 'section');
 
         $newText = $range->spliceBytes($resolved['text'], $match['byteStart'], $match['byteEnd'], '');
-        $this->refuseEmptyPage($newText, $page);
-
         return $this->writeEffectiveText($page, $newText, $resolved['pendingId'], $summary);
     }
 
@@ -718,8 +725,6 @@ class remote_plugin_reviewqueue extends RemotePlugin
         $this->checkExpect($actualHash, $expect, 'line range');
 
         $newText = $range->spliceBytes($resolved['text'], $byteStart, $byteEnd, (string) $text);
-        $this->refuseEmptyPage($newText, $page);
-
         return $this->writeEffectiveText($page, $newText, $resolved['pendingId'], $summary);
     }
 
@@ -773,8 +778,6 @@ class remote_plugin_reviewqueue extends RemotePlugin
         $newText = $all
             ? str_replace($search, (string) $replace, $text)
             : $this->replaceOnce($text, $search, (string) $replace);
-        $this->refuseEmptyPage($newText, $page);
-
         return $this->writeEffectiveText($page, $newText, $resolved['pendingId'], $summary);
     }
 
@@ -1068,6 +1071,8 @@ class remote_plugin_reviewqueue extends RemotePlugin
      */
     protected function writeEffectiveText($page, $newText, $updateId, $summary)
     {
+        $this->refuseEmptyPage($newText, $page);
+
         action_plugin_reviewqueue_save::$rangeIntent = ['target' => $page, 'updateId' => (int) $updateId];
         action_plugin_reviewqueue_save::$rangeResult = null;
 

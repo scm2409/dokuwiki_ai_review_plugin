@@ -87,7 +87,7 @@ byte-for-byte instead (`helper/store.php::putMedia()`).
 | `origin` | `ui`\|`remote`\|`cli` | Path through which it was submitted |
 | `updated` | int\|null | Unix timestamp of the last in-place content update (Phase 10, null if never updated) |
 | `updateCount` | int | Number of times the content was updated in place (Phase 10, default 0) |
-| `contentHash` | string | Short hash of the current proposed text (Phase 10; same format as `helper_plugin_reviewqueue_range::hash()`) |
+| `contentHash` | string | Short hash of the current proposed text (Phase 10; same format as `helper_plugin_reviewqueue_range::hash()`). Also what `admin.php`'s approve form checks against to refuse a stale approval - see ADR-0006 |
 
 All writes exclusively via DokuWiki's `io_saveFile()` / `io_lock()` / `io_unlock()`. No
 custom locking scheme.

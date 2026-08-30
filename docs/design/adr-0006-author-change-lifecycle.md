@@ -97,8 +97,17 @@ is a review decision and implies something was wrong with the change on its meri
   (written against ADR-0004's original scope) is now wrong and is replaced with guidance
   to prefer the range write tools for continuing a draft, and `withdrawPendingChange` for
   abandoning one.
-- A reviewer who has a change's admin page open in one tab while the author continues it
-  in another can still submit a decision against the text as it was when the page loaded
-  - the badge mitigates this by making it visible after the fact, but does not lock the
-  form. Accepted: the same is already true of the live page changing under a conflicted
-  review today, and a reviewer re-approving after refreshing is the existing mitigation.
+- **A pending change's content no longer being immutable is a real hole in the review
+  guarantee unless approval itself is guarded against it, so it is:**
+  `admin.php::renderForm()` embeds the record's `contentHash` as a hidden `rqhash` field
+  at render time; `handle()` refuses an `approve` whose submitted `rqhash` no longer
+  matches the record's current `contentHash`, with a message asking the reviewer to look
+  at the current text. Concretely: reviewer opens the diff for change #42, the author
+  continues #42 via a range write before the reviewer clicks Approve, the submission is
+  refused rather than silently publishing text the reviewer never saw - the badge from
+  the point above is what a reviewer sees *before* deciding; this check is what stops a
+  decision already in flight from applying to different text than it was made against.
+  `reject` doesn't publish anything and needs no such check; `resolve` (the conflict path)
+  already publishes exactly the text submitted in its own form rather than re-reading by
+  id, so it was never exposed to this in the first place. Verified end to end in
+  `test/e2e/tests/range-write.api.spec.ts`.

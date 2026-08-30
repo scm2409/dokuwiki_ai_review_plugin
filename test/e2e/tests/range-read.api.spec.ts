@@ -188,3 +188,56 @@ test('searchWithContext covers both live pages and the caller own pending drafts
   });
   expect(liveOnly.result.map((r: any) => r.page)).toEqual([livePageId]);
 });
+
+test('getPageOutline exposes a distinct hashWithChildren for a section that has nested subsections', async ({
+  request,
+}) => {
+  // Regression: "hash" is always the section's own text alone (matching
+  // core's byte range), but replaceSection/deleteSection always act
+  // together with any nested subsections. Passing "hash" as their $expect
+  // for a heading with children would refuse the write every time, even
+  // when nothing changed - see docs/design/adr-0005.
+  const pageId = `rangehashchildren${Date.now()}`;
+  await saveAsMartin(request, pageId, NESTED);
+
+  const outline = await rpc(request, tokens.martin, 'plugin.reviewqueue.getPageOutline', { page: pageId });
+  const alpha = outline.result.sections.find((s: any) => s.title === 'Alpha');
+  const beta = outline.result.sections.find((s: any) => s.title === 'Beta');
+
+  // Alpha has a nested child (Alpha Child): the two hashes must differ.
+  expect(alpha.hashWithChildren).not.toBe(alpha.hash);
+  // Beta has no children: both hashes describe the same text.
+  expect(beta.hashWithChildren).toBe(beta.hash);
+
+  // hashWithChildren is exactly what getSection's default (children=true,
+  // matching replaceSection/deleteSection) computes for the same section.
+  const withChildren = await rpc(request, tokens.martin, 'plugin.reviewqueue.getSection', {
+    page: pageId,
+    section: 'Alpha',
+  });
+  expect(alpha.hashWithChildren).toBe(withChildren.result.hash);
+});
+
+test('a section index-0 range round-trips through getSection even when the page starts with a heading', async ({
+  request,
+}) => {
+  // Regression: outline()'s own range-building can legitimately produce a
+  // range like "-1" for an empty preamble (a page whose very first byte is
+  // a heading) - findSection()'s range-matching regex used to require at
+  // least one digit before the dash and silently rejected exactly the
+  // range outline() itself had just emitted.
+  const pageId = `rangepreambleroundtrip${Date.now()}`;
+  await saveAsMartin(request, pageId, '====== Starts With Heading ======\n\nbody\n');
+
+  const outline = await rpc(request, tokens.martin, 'plugin.reviewqueue.getPageOutline', { page: pageId });
+  const preamble = outline.result.sections[0];
+  expect(preamble.title).toBe('');
+  expect(preamble.bytes).toBe(0);
+
+  const bySpec = await rpc(request, tokens.martin, 'plugin.reviewqueue.getSection', {
+    page: pageId,
+    section: preamble.range,
+  });
+  expect(bySpec.error).toBeUndefined();
+  expect(bySpec.result.text).toBe('');
+});

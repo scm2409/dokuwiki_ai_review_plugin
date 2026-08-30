@@ -19,6 +19,7 @@ $lang['conflict_notice']  = 'Die Live-Seite hat sich seit der Einreichung geänd
 $lang['apply_failed']     = 'Beim Anwenden Ihrer Entscheidung ist etwas schiefgelaufen. Bitte versuchen Sie es erneut oder wenden Sie sich an eine Administratorin/einen Administrator.';
 $lang['not_found']        = 'Diese offene Änderung existiert nicht mehr oder wurde bereits entschieden.';
 $lang['no_self_review']   = 'Sie können Ihre eigene Änderung nicht freigeben oder ablehnen.';
+$lang['content_changed']  = 'Der Autor/die Autorin hat diese offene Änderung geändert, nachdem Sie diese Seite geladen haben. Bitte prüfen Sie den aktuellen Text, bevor Sie freigeben.';
 $lang['approved_summary'] = '(freigegeben von %s, Änderung #%d)';
 
 $lang['banner']      = 'Für diese Seite liegen %d offene Änderung(en) zur Prüfung vor.';

@@ -42,11 +42,19 @@ async function approveAsMartin(request: any, rqid: number) {
   // same cross-user-cookie approach gaps.martin.spec.ts uses, just without
   // needing a browser `page` fixture in this api-project file.
   const cookie = cookieHeaderFor('martin');
-  const adminPage = await request.get('/doku.php?do=admin&page=reviewqueue', { headers: { Cookie: cookie } });
-  const sectok = /name="sectok" value="([^"]+)"/.exec(await adminPage.text())![1];
+  const html = await (
+    await request.get('/doku.php?do=admin&page=reviewqueue', { headers: { Cookie: cookie } })
+  ).text();
+  const sectok = /name="sectok" value="([^"]+)"/.exec(html)![1];
+  // rqhash is per-record (the content hash this page render actually saw -
+  // see admin.php::renderForm()), unlike sectok which is one page-wide CSRF
+  // token - so it must come from this specific rqid's own block, not just
+  // the first match on the page.
+  const block = new RegExp(`data-rqid="${rqid}".*?</form>`, 's').exec(html)![0];
+  const rqhash = /name="rqhash" value="([^"]*)"/.exec(block)![1];
   return request.post('/doku.php', {
     headers: { Cookie: cookie },
-    form: { do: 'admin', page: 'reviewqueue', rqid: String(rqid), rqaction: 'approve', sectok },
+    form: { do: 'admin', page: 'reviewqueue', rqid: String(rqid), rqaction: 'approve', rqhash, sectok },
   });
 }
 

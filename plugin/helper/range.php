@@ -49,7 +49,7 @@ class helper_plugin_reviewqueue_range extends Plugin
      * @param string $text
      * @return array[] one entry per section: index, level, title, hid,
      *                  range, byteStart, byteEnd, lineStart, lineEnd,
-     *                  bytes, lines, hash
+     *                  bytes, lines, hash, hashWithChildren
      */
     public function outline($text)
     {
@@ -102,6 +102,22 @@ class helper_plugin_reviewqueue_range extends Plugin
             ];
         }
 
+        // A second pass, once every section's own byteEnd is known: the
+        // "hash" above only ever covers a section's own text, matching this
+        // format's core-compatible range (verified against a real
+        // section-edit link). But replaceSection()/deleteSection() always
+        // act on a section *with* its nested subsections (matching
+        // resolveSection()'s default) - checking $expect against "hash"
+        // there would refuse every write to a heading that has children,
+        // permanently, since that hash can never match what those tools
+        // actually replace. "hashWithChildren" is what to pass instead.
+        foreach ($sections as $i => $section) {
+            $childrenEnd = $this->childrenInclusiveEnd($sections, $i);
+            $sections[$i]['hashWithChildren'] = $childrenEnd === $section['byteEnd']
+                ? $section['hash']
+                : $this->hash(substr($text, $section['byteStart'], $childrenEnd - $section['byteStart']));
+        }
+
         return $sections;
     }
 
@@ -130,42 +146,34 @@ class helper_plugin_reviewqueue_range extends Plugin
             throw new \InvalidArgumentException("reviewqueue: no section matches '$spec'");
         }
 
-        if (!$withChildren || $match['index'] === 0) {
+        if (!$withChildren) {
             return $match;
         }
 
-        // Extend forward past any heading deeper than this one's level, i.e.
-        // stop at the next heading of equal or shallower level (or the end
-        // of the text). Index 0 (the preamble) has level 0 and never has
-        // "children" in this sense.
-        $end = $match;
-        foreach ($sections as $candidate) {
-            if ($candidate['index'] <= $match['index']) continue;
-            if ($candidate['level'] <= $match['level']) break;
-            $end = $candidate;
-        }
-
-        if ($end['index'] === $match['index']) {
+        $byteEnd = $this->childrenInclusiveEnd($sections, $match['index']);
+        if ($byteEnd === $match['byteEnd']) {
             return $match;
         }
 
         $len = strlen($text);
-        $byteEnd = $end['byteEnd'];
         $slice = substr($text, $match['byteStart'], $byteEnd - $match['byteStart']);
+        $hash = $this->hash($slice);
 
         return [
-            'index'     => $match['index'],
-            'level'     => $match['level'],
-            'title'     => $match['title'],
-            'hid'       => $match['hid'],
-            'range'     => $this->rangeStringFromBytes($match['byteStart'], $byteEnd, $len),
-            'byteStart' => $match['byteStart'],
-            'byteEnd'   => $byteEnd,
-            'lineStart' => $match['lineStart'],
-            'lineEnd'   => $this->lineAt($text, max($match['byteStart'], $byteEnd - 1)),
-            'bytes'     => strlen($slice),
-            'lines'     => $this->countLines($slice),
-            'hash'      => $this->hash($slice),
+            'index'            => $match['index'],
+            'level'            => $match['level'],
+            'title'            => $match['title'],
+            'hid'              => $match['hid'],
+            'range'            => $this->rangeStringFromBytes($match['byteStart'], $byteEnd, $len),
+            'byteStart'        => $match['byteStart'],
+            'byteEnd'          => $byteEnd,
+            'lineStart'        => $match['lineStart'],
+            'lineEnd'          => $this->lineAt($text, max($match['byteStart'], $byteEnd - 1)),
+            'bytes'            => strlen($slice),
+            'lines'            => $this->countLines($slice),
+            'hash'             => $hash,
+            // Already fully extended - nothing further to include.
+            'hashWithChildren' => $hash,
         ];
     }
 
@@ -401,6 +409,37 @@ class helper_plugin_reviewqueue_range extends Plugin
     }
 
     /**
+     * The byte offset a section's content extends to once its nested
+     * subsections are included: the next section at an equal-or-shallower
+     * level, or the end of the text if there is none. Shared by outline()
+     * (to compute "hashWithChildren" for every entry up front) and
+     * resolveSection() (to compute the extended range for one entry on
+     * demand) so the two never define "with children" two different ways.
+     *
+     * The preamble (index 0, level 0) never has "children" in this sense -
+     * it always returns its own byteEnd unchanged.
+     *
+     * @param array[] $sections outline() result, in document order
+     * @param int $index
+     * @return int
+     */
+    protected function childrenInclusiveEnd(array $sections, $index)
+    {
+        $section = $sections[$index];
+        if ($section['level'] === 0) {
+            return $section['byteEnd'];
+        }
+
+        $end = $section['byteEnd'];
+        foreach ($sections as $candidate) {
+            if ($candidate['index'] <= $index) continue;
+            if ($candidate['level'] <= $section['level']) break;
+            $end = $candidate['byteEnd'];
+        }
+        return $end;
+    }
+
+    /**
      * @param array[] $sections outline() result
      * @param string $spec
      * @return array|null
@@ -416,7 +455,7 @@ class helper_plugin_reviewqueue_range extends Plugin
             return $sections[(int) $spec] ?? null;
         }
 
-        if (preg_match('/^\d+-\d*$/', $spec)) {
+        if (preg_match('/^\d*-\d*$/', $spec)) {
             foreach ($sections as $section) {
                 if ($section['range'] === $spec) return $section;
             }

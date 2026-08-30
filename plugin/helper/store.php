@@ -225,17 +225,45 @@ class helper_plugin_reviewqueue_store extends Plugin
      */
     public function withdraw($id, $reason)
     {
-        $record = $this->get((int) $id);
-        if (!$record || $record['state'] !== 'pending') {
-            throw new \RuntimeException("reviewqueue: change #$id is not open for withdrawal");
+        $id = (int) $id;
+        $jsonFile = $this->queueFile($id, 'json');
+
+        // Locked the same way updateContent() is, and for the same reason:
+        // re-verify state under the lock rather than trusting a read from
+        // moments earlier, so this can't race with a concurrent
+        // updateContent() on the same id (both take this exact lock before
+        // touching the record). This does not close every race with
+        // apply.php's approve()/reject() - those still read-modify-archive
+        // unlocked, a pre-existing gap this method now shares rather than
+        // introduces; closing that fully would mean locking the whole
+        // decision flow, a larger change than this fix.
+        io_lock($jsonFile);
+        try {
+            if (!file_exists($jsonFile)) {
+                throw new \RuntimeException("reviewqueue: change #$id is not open for withdrawal");
+            }
+            $record = json_decode(io_readFile($jsonFile), true);
+            if (!is_array($record) || $record['state'] !== 'pending') {
+                throw new \RuntimeException("reviewqueue: change #$id is not open for withdrawal");
+            }
+
+            $record['state']      = 'withdrawn';
+            $record['comment']    = (string) $reason;
+            $record['reviewer']   = null;
+            $record['reviewedAt'] = time();
+
+            $written = @file_put_contents($jsonFile, json_encode(
+                $record,
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            ));
+            if ($written === false) {
+                throw new \RuntimeException("reviewqueue: failed to withdraw change #$id");
+            }
+        } finally {
+            io_unlock($jsonFile);
         }
 
-        $record['state']      = 'withdrawn';
-        $record['comment']    = (string) $reason;
-        $record['reviewer']   = null;
-        $record['reviewedAt'] = time();
-        $this->update($record);
-        $this->archive($record['id']);
+        $this->archive($id);
     }
 
     /**

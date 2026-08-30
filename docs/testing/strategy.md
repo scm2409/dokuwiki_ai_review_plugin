@@ -141,6 +141,16 @@ remote API, ACL, rendering) and can only really be verified end-to-end.
     reviewer, via `checkOwnChangeAccess`'s stricter rule than
     `checkChangeAccess`. A `conflicted` or already-decided change cannot be
     withdrawn.
+25. The approve-time race Phase 10 makes possible (a pending change's
+    content is no longer immutable, ADR-0006): a reviewer opens the admin
+    page for change #N, the author continues #N (a range write or
+    `updatePendingChange`) before Approve is clicked, and the reviewer's
+    stale submission is refused rather than publishing text they never saw
+    - approving again with the current page's hash then succeeds normally.
+    `getPageOutline`'s `hashWithChildren` (distinct from the section's own
+    `hash`) is what makes `replaceSection`/`deleteSection`'s `$expect`
+    actually usable for a heading that has nested subsections in the first
+    place - both are exercised in `range-write.api.spec.ts`.
 
 ### Security
 

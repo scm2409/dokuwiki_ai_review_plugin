@@ -127,9 +127,8 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         // written back to the DRAFT - whose own content is what actually
         // matters here, not whether it happens to match the live page.
         $intent = self::$rangeIntent;
-        $continuing = $intent !== null
-            && $intent['target'] === $data['id']
-            && $intent['updateId'] > 0;
+        $isRangeToolCall = $intent !== null && $intent['target'] === $data['id'];
+        $continuing = $isRangeToolCall && $intent['updateId'] > 0;
 
         if (!$data['contentChanged'] && !$continuing) return; // no-op save, nothing to hold back
 
@@ -160,7 +159,14 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         // change is invisible in the read path (ADR-0004), so an author who
         // didn't check can easily have based this edit on the live revision
         // and be about to clobber their own earlier, unreviewed work.
-        $stacked = $store->listChanges([
+        //
+        // A range-tool call never needs this: $continuing already means
+        // exactly "this page's one open change is the one being continued",
+        // and a fresh queue via a range tool only happens when
+        // effectiveText() found no open change to continue in the first
+        // place - either way this would always come back empty or unused,
+        // so skip the full queue-directory scan (listChanges()) for it.
+        $stacked = $isRangeToolCall ? [] : $store->listChanges([
             'author' => $user,
             'state'  => 'pending',
             'type'   => 'page',
@@ -187,7 +193,7 @@ class action_plugin_reviewqueue_save extends ActionPlugin
             $failure = $e;
         }
 
-        if ($intent !== null && $intent['target'] === $data['id']) {
+        if ($isRangeToolCall) {
             // Report the outcome as a plain return value instead of the
             // throw-as-success-signal convention below - that convention
             // exists only because core.savePage/appendPage have no other
@@ -195,6 +201,11 @@ class action_plugin_reviewqueue_save extends ActionPlugin
             // range write tools call ApiCore::savePage() themselves and can
             // just read this back once it returns.
             if ($failure) {
+                // Same reasoning as the unlock() below: ApiCore::savePage()
+                // is lock() -> saveWikiText() -> unlock(), so throwing from
+                // inside saveWikiText() skips its own unlock() and strands
+                // the page lock for the full timeout otherwise.
+                unlock($data['id']);
                 throw new RemoteException($this->getLang('queue_failed'), 500, $failure);
             }
             self::$rangeResult = ['status' => $status, 'pendingId' => $id, 'target' => $data['id']];

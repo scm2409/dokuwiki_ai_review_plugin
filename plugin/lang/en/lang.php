@@ -19,6 +19,7 @@ $lang['conflict_notice']  = 'The live page has changed since this change was sub
 $lang['apply_failed']     = 'Something went wrong while applying your decision. Please try again or contact an administrator.';
 $lang['not_found']        = 'That pending change no longer exists or has already been decided.';
 $lang['no_self_review']   = "You can't approve or reject your own change.";
+$lang['content_changed']  = 'The author changed this pending change after you loaded this page. Please review the current text before approving.';
 $lang['approved_summary'] = '(reviewed by %s, change #%d)';
 
 $lang['banner']      = 'There are %d pending change(s) on this page waiting for review.';

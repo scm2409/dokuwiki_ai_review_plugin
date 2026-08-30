@@ -38,11 +38,19 @@ async function approveAsMartin(request: any, rqid: number) {
   // same cross-user-cookie approach gaps.martin.spec.ts uses, just without
   // needing a browser `page` fixture in this api-project file.
   const cookie = cookieHeaderFor('martin');
-  const adminPage = await request.get('/doku.php?do=admin&page=reviewqueue', { headers: { Cookie: cookie } });
-  const sectok = /name="sectok" value="([^"]+)"/.exec(await adminPage.text())![1];
+  const html = await (
+    await request.get('/doku.php?do=admin&page=reviewqueue', { headers: { Cookie: cookie } })
+  ).text();
+  const sectok = /name="sectok" value="([^"]+)"/.exec(html)![1];
+  // rqhash is per-record (the content hash this page render actually saw -
+  // see admin.php::renderForm()), unlike sectok which is one page-wide CSRF
+  // token - so it must come from this specific rqid's own block, not just
+  // the first match on the page.
+  const block = new RegExp(`data-rqid="${rqid}".*?</form>`, 's').exec(html)![0];
+  const rqhash = /name="rqhash" value="([^"]*)"/.exec(block)![1];
   return request.post('/doku.php', {
     headers: { Cookie: cookie },
-    form: { do: 'admin', page: 'reviewqueue', rqid: String(rqid), rqaction: 'approve', sectok },
+    form: { do: 'admin', page: 'reviewqueue', rqid: String(rqid), rqaction: 'approve', rqhash, sectok },
   });
 }
 
@@ -255,4 +263,89 @@ test('deleteSection removes a heading and everything nested under it', async ({ 
   expect(text.result).not.toContain('A body');
   expect(text.result).not.toContain('child body');
   expect(text.result).toContain('B body');
+});
+
+test('replaceSection accepts hashWithChildren, but not the plain hash, as $expect for a section with children', async ({
+  request,
+}) => {
+  const pageId = `rwhashchildren${Date.now()}`;
+  await saveAsMartin(
+    request,
+    pageId,
+    '====== T ======\n\n===== A =====\n\nA body.\n\n==== A Child ====\n\nchild body.\n'
+  );
+
+  const outline = await rpc(request, tokens.kail, 'plugin.reviewqueue.getPageOutline', { page: pageId });
+  const a = outline.result.sections.find((s: any) => s.title === 'A');
+  expect(a.hashWithChildren).not.toBe(a.hash);
+
+  // The plain "hash" (own text only) never matches what replaceSection
+  // actually checks against, since it always includes nested subsections.
+  const wrongExpect = await rpc(request, tokens.kail, 'plugin.reviewqueue.replaceSection', {
+    page: pageId,
+    section: 'A',
+    text: '===== A =====\n\nreplaced\n',
+    expect: a.hash,
+  });
+  expect(wrongExpect.error).toBeTruthy();
+  expect(wrongExpect.error.message).toMatch(/changed since you last read it/);
+
+  // hashWithChildren is the correct one and the write goes through.
+  const rightExpect = await rpc(request, tokens.kail, 'plugin.reviewqueue.replaceSection', {
+    page: pageId,
+    section: 'A',
+    text: '===== A =====\n\nreplaced\n',
+    expect: a.hashWithChildren,
+  });
+  expect(rightExpect.error).toBeUndefined();
+  expect(rightExpect.result.status).toBe('queued');
+});
+
+test('approving a change refuses when the author changed it after this page was rendered', async ({
+  request,
+}) => {
+  // Regression: since Phase 10 a pending change's content is no longer
+  // immutable (docs/design/adr-0006) - if approve() simply re-read the
+  // content by id at submit time, an author continuing their draft between
+  // the reviewer loading the admin page and clicking Approve would get
+  // text published that the reviewer never actually saw.
+  const pageId = `rwtoctou${Date.now()}`;
+  const queued = await rpc(request, tokens.kail, 'core.savePage', {
+    page: pageId,
+    text: 'original text',
+    summary: 'v1',
+  });
+  const rqid = Number(/change #(\d+)/.exec(queued.error.message)![1]);
+
+  // martin "opens" the admin page (capturing the rqhash it renders)...
+  const cookie = cookieHeaderFor('martin');
+  const htmlBefore = await (
+    await request.get('/doku.php?do=admin&page=reviewqueue', { headers: { Cookie: cookie } })
+  ).text();
+  const blockBefore = new RegExp(`data-rqid="${rqid}".*?</form>`, 's').exec(htmlBefore)![0];
+  const staleHash = /name="rqhash" value="([^"]*)"/.exec(blockBefore)![1];
+  const sectok = /name="sectok" value="([^"]+)"/.exec(htmlBefore)![1];
+
+  // ...then, before martin clicks Approve, kail continues the draft.
+  const updated = await rpc(request, tokens.kail, 'plugin.reviewqueue.updatePendingChange', {
+    id: rqid,
+    text: 'MUTATED text',
+  });
+  expect(updated.result.status).toBe('updated');
+
+  // martin's stale form submission must be refused, not silently publish
+  // the mutated text.
+  await request.post('/doku.php', {
+    headers: { Cookie: cookie },
+    form: { do: 'admin', page: 'reviewqueue', rqid: String(rqid), rqaction: 'approve', rqhash: staleHash, sectok },
+  });
+  const live = await request.get(`/doku.php?id=${pageId}`);
+  expect(await live.text()).not.toContain('MUTATED text');
+  const status = await rpc(request, tokens.kail, 'plugin.reviewqueue.getStatus', { id: rqid });
+  expect(status.result.state).toBe('pending');
+
+  // Approving again with the *current* hash succeeds normally.
+  const approveRes = await approveAsMartin(request, rqid);
+  expect(await approveRes.text()).toContain('approved and published');
+  expect(await (await request.get(`/doku.php?id=${pageId}`)).text()).toContain('MUTATED text');
 });
