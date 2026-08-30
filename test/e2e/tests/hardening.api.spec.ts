@@ -141,3 +141,48 @@ test('fail-closed: an unwritable queue rejects the save instead of publishing it
   });
   expect(after.error.message).toMatch(/submitted for review/);
 });
+
+test('fail-closed: an unwritable pending change survives a failed updateContent()', async ({
+  request,
+}) => {
+  // Same guiding principle as the enqueue() case above, applied to Phase
+  // 10's in-place continuation (docs/design/adr-0006): a failed write must
+  // never leave the change silently unchanged-but-reported-as-updated, and
+  // must never corrupt what was there before.
+  const pageId = `failupdate${Date.now()}`;
+  const queueDir = '/var/www/html/data/reviewqueue/queue';
+
+  const queued = await rpc(request, tokens.kail, 'core.savePage', {
+    page: pageId,
+    text: 'original content',
+    summary: 'first',
+  });
+  const rqid = Number(/change #(\d+)/.exec(queued.error.message)![1]);
+
+  // Read-only on the file itself (not just the directory): updateContent()
+  // rewrites an *existing* file, which only needs directory write
+  // permission to create - the file's own permissions are what has to
+  // block this.
+  inContainer('chmod', '0400', `${queueDir}/${rqid}.content`);
+  try {
+    const update = await rpc(request, tokens.kail, 'plugin.reviewqueue.updatePendingChange', {
+      id: rqid,
+      text: 'attempted update',
+    });
+    expect(update.error).toBeTruthy();
+    expect(update.error.message).toMatch(/could not be written|not saved/i);
+
+    const text = await rpc(request, tokens.kail, 'plugin.reviewqueue.getPendingText', { id: rqid });
+    expect(text.result).toBe('original content');
+  } finally {
+    inContainer('chmod', '0644', `${queueDir}/${rqid}.content`);
+  }
+
+  // Works again once the file is writable.
+  const after = await rpc(request, tokens.kail, 'plugin.reviewqueue.updatePendingChange', {
+    id: rqid,
+    text: 'now updates fine',
+  });
+  expect(after.error).toBeUndefined();
+  expect(after.result.status).toBe('updated');
+});

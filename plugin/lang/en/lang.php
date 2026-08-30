@@ -19,12 +19,14 @@ $lang['conflict_notice']  = 'The live page has changed since this change was sub
 $lang['apply_failed']     = 'Something went wrong while applying your decision. Please try again or contact an administrator.';
 $lang['not_found']        = 'That pending change no longer exists or has already been decided.';
 $lang['no_self_review']   = "You can't approve or reject your own change.";
+$lang['content_changed']  = 'The author changed this pending change after you loaded this page. Please review the current text before approving.';
 $lang['approved_summary'] = '(reviewed by %s, change #%d)';
 
 $lang['banner']      = 'There are %d pending change(s) on this page waiting for review.';
 $lang['banner_link'] = 'Open the review queue';
 
 $lang['stacked_notice'] = 'Careful: there are %d unreviewed changes for this page (#%s), each based on the live revision rather than on each other. Approving more than one will overwrite the earlier ones. Review them one at a time and reject the ones you do not want.';
+$lang['updated_notice'] = 'The author has continued this change %d time(s) since it was first submitted, most recently on %s. What you see below is the latest text.';
 
 $lang['resolved']      = 'Change #%d resolved and published.';
 $lang['resolve_label'] = 'Resolved page text (remove the conflict markers and leave what the page should say)';

@@ -25,6 +25,14 @@ on the next attempt.
 
 **All other users** notice nothing of the plugin.
 
+An author subject to review can also continue their own still-pending change instead of
+submitting a new one every time (via the range write tools or `updatePendingChange`), and
+can withdraw it themselves if they change their mind (`withdrawPendingChange`) — see
+`docs/design/adr-0006-author-change-lifecycle.md`. A change that was continued shows an
+"updated N× " notice in the admin queue so a reviewer knows the text has moved on since
+they last looked; a withdrawn change disappears from the queue but stays visible in its
+archived state via the API, distinct from a rejection (no reviewer is ever recorded on it).
+
 ## Conflicts
 
 If the page has changed since a change was submitted, approval automatically

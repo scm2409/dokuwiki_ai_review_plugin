@@ -15,11 +15,29 @@ see [`docs/research/kaos-hooks.md`](../research/kaos-hooks.md).
   user               │                     │                          (author: original user)
                       │                     └─ conflict ──> [conflicted] ──manual──> [approved]
                       ├──reject(reason)──> [rejected]
+                      ├──author withdraws──> [withdrawn]
                       └──newer base makes change moot──> [superseded]
 ```
 
-Terminal states: `approved`, `rejected`, `superseded`. All three move from `queue/` to
-`archive/` once reached (see data model).
+Terminal states: `approved`, `rejected`, `withdrawn`, `superseded`. All four move from
+`queue/` to `archive/` once reached (see data model).
+
+`withdrawn` (added Phase 10, see [ADR-0006](adr-0006-author-change-lifecycle.md)) is the
+author's own counterpart to `reject`: the author cancels their own still-`pending` change
+via `plugin.reviewqueue.withdrawPendingChange`, without a reviewer's decision. Unlike
+`rejected`, no `reviewer` is ever recorded on a `withdrawn` entry - `getStatus()`'s
+`reviewer` field staying empty is precisely what distinguishes "the author changed their
+mind" from "a human reviewed this and said no". Only a `pending` entry can be withdrawn;
+`conflicted` still requires the reviewer's manual resolution regardless of who authored it.
+
+While a change is still `pending`, its content is no longer strictly immutable as it was
+through Phase 9: `plugin.reviewqueue.updatePendingChange` and the range write tools
+(`replaceSection`, `insertSection`, `deleteSection`, `replaceLines`, `replaceText` - see
+[ADR-0005](adr-0005-range-addressed-access.md)) replace the proposed text of the author's
+own open change in place instead of creating a new one, provided it is still `pending`.
+`base`/`baseRev`/`baseHash`/`created` are never touched by this, so the reviewer's diff and
+the three-way merge keep their original anchor no matter how many times the author has
+continued the draft.
 
 `superseded` is set when a *newer* pending change by the same user for the same page is
 created while an older one is still open, **and** the reviewer decides to handle only
@@ -61,12 +79,15 @@ byte-for-byte instead (`helper/store.php::putMedia()`).
 | `baseRev` | int\|null | Timestamp of the revision the change is based on (null for new pages) |
 | `baseHash` | string | Hash of the base text, for merge detection |
 | `created` | int | Unix timestamp of submission |
-| `state` | `pending`\|`approved`\|`rejected`\|`conflicted`\|`superseded` | Current status |
-| `reviewer` | string\|null | Who made the decision |
+| `state` | `pending`\|`approved`\|`rejected`\|`conflicted`\|`withdrawn`\|`superseded` | Current status |
+| `reviewer` | string\|null | Who made the decision (never set for `withdrawn`) |
 | `reviewedAt` | int\|null | When the decision was made |
-| `comment` | string\|null | Rejection/approval comment |
+| `comment` | string\|null | Rejection/approval/withdrawal comment |
 | `mergeResult` | `clean`\|`auto-merged`\|`conflict`\|null | Result of the 3-way merge on approval |
 | `origin` | `ui`\|`remote`\|`cli` | Path through which it was submitted |
+| `updated` | int\|null | Unix timestamp of the last in-place content update (Phase 10, null if never updated) |
+| `updateCount` | int | Number of times the content was updated in place (Phase 10, default 0) |
+| `contentHash` | string | Short hash of the current proposed text (Phase 10; same format as `helper_plugin_reviewqueue_range::hash()`). Also what `admin.php`'s approve form checks against to refuse a stale approval - see ADR-0006 |
 
 All writes exclusively via DokuWiki's `io_saveFile()` / `io_lock()` / `io_unlock()`. No
 custom locking scheme.
@@ -100,7 +121,7 @@ side effects for other users."
 | `action/media.php` | `MEDIA_UPLOAD_FINISH` | BEFORE | Copy upload bytes into the queue, `preventDefault()` (Phase 7) |
 | `action/banner.php` | `TPL_CONTENT_DISPLAY` | BEFORE | Prepend banner (`$event->data` is the rendered HTML string, by reference — see `docs/research/kaos-hooks.md`), only if `show_banner` is on, the current user `isReviewer()`, **and** open pending changes exist for this page |
 | `admin.php` | `AdminPlugin` interface | — | `handle()`/`html()` are called by `dokuwiki\Action\Admin::preProcess()` for every request to the page (`handle()` processes an approve/reject POST including `checkSecurityToken()` and the self-approval ban, then `html()` for the queue list + diff). `isAccessibleByCurrentUser()` is overridden to `isReviewer()` instead of DokuWiki admin/manager rights — no separate `action/review.php` needed, this is the native `AdminPlugin` mechanism for that |
-| `remote.php` | `RemotePlugin` interface | — | `listMyPending`, `getStatus`, `getPendingChange`, `listQueue` (reviewers only) (Phase 8) |
+| `remote.php` | `RemotePlugin` interface | — | Phase 8: `getPageToEdit`, `listMyPending`, `searchMyPending`, `getStatus`, `getPendingText`. Phase 10 (ADR-0005/ADR-0006) adds range-addressed reads (`getPageOutline`, `getSection`, `getLines`, `findInPage`, `searchWithContext`), range-addressed writes that continue the author's own open change in place (`replaceSection`, `insertSection`, `deleteSection`, `replaceLines`, `replaceText`), and full-text lifecycle tools (`updatePendingChange`, `withdrawPendingChange`) |
 
 ### Re-entrancy
 
@@ -145,15 +166,16 @@ the conflict branch, see [`docs/research/kaos-hooks.md`](../research/kaos-hooks.
 
 ## Fail-closed (guiding principle, see `CLAUDE.md`)
 
-Every attempt to write to the queue (`helper/store.php::enqueue()`) is wrapped in a
-try/catch. If the write fails (lock timeout, directory not writable, JSON encoding
-error):
+Every attempt to write to the queue (`helper/store.php::enqueue()`, and since Phase 10
+also `updateContent()` and `withdraw()`) is wrapped in a try/catch. If the write fails
+(lock timeout, directory not writable, JSON encoding error):
 
 - in the browser path: the save is aborted with an error message (no fallback to a
   normal save!),
 - in the remote path: a `RemoteException` is thrown,
 
-— in both cases the page's original state remains unchanged. Tested in test scenario 17.
+— in both cases the previous state (the live page, or the pending change's previous
+content) remains unchanged. Tested in test scenarios 17 and 23.
 
 ## MCP visibility
 

@@ -72,6 +72,20 @@ class admin_plugin_reviewqueue extends AdminPlugin
             return;
         }
 
+        // Since Phase 10 a pending change's content is no longer immutable
+        // (updatePendingChange, or a continuing range write - see
+        // docs/design/adr-0006): the author could have changed it after
+        // this reviewer loaded the page but before clicking Approve.
+        // renderForm() embeds the content hash the reviewer actually saw;
+        // if it no longer matches what is on disk now, approving would
+        // publish text nobody reviewed. 'reject' doesn't publish anything,
+        // and 'resolve' publishes the text submitted in the form itself
+        // rather than re-reading by id, so neither needs this check.
+        if ($rqaction === 'approve' && ($record['contentHash'] ?? '') !== $INPUT->str('rqhash')) {
+            msg($this->getLang('content_changed'), -1);
+            return;
+        }
+
         /** @var helper_plugin_reviewqueue_apply $apply */
         $apply = $this->loadHelper('reviewqueue_apply');
 
@@ -160,6 +174,17 @@ class admin_plugin_reviewqueue extends AdminPlugin
                 hsc($this->getLang('stacked_notice')),
                 count($siblings),
                 hsc(implode(', #', $siblings))
+            ) . '</p>';
+        }
+        if (!empty($record['updateCount'])) {
+            // The author continued this change in place (see
+            // docs/design/adr-0006) instead of stacking a new one - flag it
+            // so a reviewer who looked at it earlier knows the text has
+            // moved on since.
+            echo '<p class="reviewqueue-updated">' . sprintf(
+                hsc($this->getLang('updated_notice')),
+                $record['updateCount'],
+                dformat($record['updated'])
             ) . '</p>';
         }
         echo '<p>' . sprintf(
@@ -361,6 +386,12 @@ class admin_plugin_reviewqueue extends AdminPlugin
         $form->setHiddenField('do', 'admin');
         $form->setHiddenField('page', 'reviewqueue');
         $form->setHiddenField('rqid', $record['id']);
+        // The content this reviewer is actually looking at right now, so
+        // handle() can tell an approval of *this* text apart from one where
+        // the author changed the pending change (Phase 10:
+        // updatePendingChange/a continuing range write) after this page was
+        // rendered but before Approve was clicked - see the check there.
+        $form->setHiddenField('rqhash', $record['contentHash'] ?? '');
         $form->addTextInput('rqcomment', $this->getLang('comment_label'));
         $form->addButton('rqaction', $this->getLang('btn_approve'))->attr('value', 'approve');
         $form->addButton('rqaction', $this->getLang('btn_reject'))->attr('value', 'reject');

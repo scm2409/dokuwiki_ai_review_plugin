@@ -30,11 +30,19 @@ function rpc(request: any, token: string, method: string, params: any = []) {
 // A method appearing here that is not in this map fails the audit below - so
 // a DokuWiki upgrade or a newly installed plugin that adds a write path is
 // caught rather than silently unreviewed.
-const MUTATING: Record<string, 'queued' | 'admin-only' | 'harmless' | 'own-tool'> = {
+const MUTATING: Record<string, 'queued' | 'admin-only' | 'harmless' | 'own-tool' | 'own-queue'> = {
   core_savePage: 'queued',
   core_appendPage: 'queued',
   core_saveMedia: 'queued',
   core_deleteMedia: 'queued',
+  // Range writes go through the same ApiCore::savePage() call core.savePage
+  // itself uses (see remote.php::writeEffectiveText()), so they are queued
+  // exactly the same way and never bypass review.
+  plugin_reviewqueue_replaceSection: 'queued',
+  plugin_reviewqueue_insertSection: 'queued',
+  plugin_reviewqueue_deleteSection: 'queued',
+  plugin_reviewqueue_replaceLines: 'queued',
+  plugin_reviewqueue_replaceText: 'queued',
   // Locks are transient and cannot alter content; login/logoff affect only
   // the caller's own session.
   core_lockPages: 'harmless',
@@ -54,6 +62,16 @@ const MUTATING: Record<string, 'queued' | 'admin-only' | 'harmless' | 'own-tool'
   plugin_reviewqueue_searchMyPending: 'own-tool',
   plugin_reviewqueue_getStatus: 'own-tool',
   plugin_reviewqueue_getPendingText: 'own-tool',
+  plugin_reviewqueue_getPageOutline: 'own-tool',
+  plugin_reviewqueue_getSection: 'own-tool',
+  plugin_reviewqueue_getLines: 'own-tool',
+  plugin_reviewqueue_findInPage: 'own-tool',
+  plugin_reviewqueue_searchWithContext: 'own-tool',
+  // These do write, but only to a queue entry the caller already owns and
+  // that has not been reviewed yet - they can never make unreviewed content
+  // live, which is the guarantee this audit exists to protect.
+  plugin_reviewqueue_updatePendingChange: 'own-queue',
+  plugin_reviewqueue_withdrawPendingChange: 'own-queue',
 };
 
 test('every mutating remote method is accounted for', async ({ request }) => {
@@ -131,6 +149,38 @@ test('savePage, appendPage and saveMedia are all queued, never applied', async (
   expect(text).not.toContain('via savePage');
   expect(text).not.toContain('via appendPage');
   expect((await request.get(`/lib/exe/fetch.php?media=${pageId}.png`)).status()).toBe(404);
+});
+
+test('range write tools are queued, never applied, exactly like savePage', async ({ request }) => {
+  const pageId = `lockrange${Date.now()}`;
+
+  // martin publishes a page directly so there is something to edit - range
+  // write tools operate on existing effective text, not page creation.
+  const setup = await rpc(request, tokens.martin, 'core.savePage', {
+    page: pageId,
+    text: '====== Range Lockdown Test ======\n\noriginal\n',
+    summary: 's',
+  });
+  expect(setup.result).toBe(true);
+
+  const replace = await rpc(request, tokens.kail, 'plugin.reviewqueue.replaceText', {
+    page: pageId,
+    search: 'original',
+    replace: 'via replaceText',
+  });
+  expect(replace.error).toBeFalsy();
+  expect(replace.result.status).toBe('queued');
+  expect(replace.result.pendingId).toBeGreaterThan(0);
+
+  // Nothing of it is live.
+  const page = await request.get(`/doku.php?id=${pageId}`);
+  const text = await page.text();
+  expect(text).not.toContain('via replaceText');
+  expect(text).toContain('original');
+
+  // ...and it shows up as a change awaiting review, same as core.savePage.
+  const pending = await rpc(request, tokens.kail, 'plugin.reviewqueue.listMyPending');
+  expect(pending.result.map((r: any) => r.target)).toContain(pageId);
 });
 
 test('deleteMedia cannot remove a file directly', async ({ request }) => {
