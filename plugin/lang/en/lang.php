@@ -25,6 +25,7 @@ $lang['banner']      = 'There are %d pending change(s) on this page waiting for 
 $lang['banner_link'] = 'Open the review queue';
 
 $lang['stacked_notice'] = 'Careful: there are %d unreviewed changes for this page (#%s), each based on the live revision rather than on each other. Approving more than one will overwrite the earlier ones. Review them one at a time and reject the ones you do not want.';
+$lang['updated_notice'] = 'The author has continued this change %d time(s) since it was first submitted, most recently on %s. What you see below is the latest text.';
 
 $lang['resolved']      = 'Change #%d resolved and published.';
 $lang['resolve_label'] = 'Resolved page text (remove the conflict markers and leave what the page should say)';

@@ -66,6 +66,23 @@ remote methods not marked read-only against a list where each method states *why
 harmless. If an unknown writing method shows up — through a DokuWiki update or a newly
 installed plugin — the test fails instead of the gap going unnoticed.
 
+## Phase 10 addendum: the range write tools are not a new path
+
+`replaceSection`/`insertSection`/`deleteSection`/`replaceLines`/`replaceText`
+(`plugin/remote.php`, see [`adr-0005-range-addressed-access.md`](adr-0005-range-addressed-access.md))
+each compute a full new page text and hand it to `dokuwiki\Remote\ApiCore::savePage()`
+directly (`remote.php::writeEffectiveText()`) - the same call `core.savePage` itself
+makes, with the same ACL/lock/spam checks and the same `COMMON_WIKIPAGE_SAVE`
+interception. They add no new route into `saveWikiText()`, so this audit's `core.savePage`
+row already covers them; `lockdown.api.spec.ts`'s `MUTATING` map lists them as `queued`
+for exactly this reason, and a dedicated test (`range write tools are queued, never
+applied, exactly like savePage`) exercises it directly.
+
+`updatePendingChange`/`withdrawPendingChange` are a different kind of write: they only
+ever touch a queue entry the caller already authored and that has not been reviewed yet
+(`checkOwnChangeAccess()`), so they can never publish anything - `lockdown.api.spec.ts`
+lists them separately as `own-queue`.
+
 Additional operational safeguards, see [`../usage.md`](../usage.md):
 
 - keep the ACL for the review-required account as tight as possible (no `AUTH_DELETE`

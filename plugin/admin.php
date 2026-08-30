@@ -162,6 +162,17 @@ class admin_plugin_reviewqueue extends AdminPlugin
                 hsc(implode(', #', $siblings))
             ) . '</p>';
         }
+        if (!empty($record['updateCount'])) {
+            // The author continued this change in place (see
+            // docs/design/adr-0006) instead of stacking a new one - flag it
+            // so a reviewer who looked at it earlier knows the text has
+            // moved on since.
+            echo '<p class="reviewqueue-updated">' . sprintf(
+                hsc($this->getLang('updated_notice')),
+                $record['updateCount'],
+                dformat($record['updated'])
+            ) . '</p>';
+        }
         echo '<p>' . sprintf(
             hsc($this->getLang('meta')),
             hsc($record['author']),

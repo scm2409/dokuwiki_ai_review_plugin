@@ -100,6 +100,48 @@ remote API, ACL, rendering) and can only really be verified end-to-end.
     own horizontal scrollbar (`.reviewqueue-scroll`, `overflow-x: auto`)
     instead of overflowing the page with no way to reach the rest of it.
 
+### Range-addressed access (Phase 10, ADR-0005)
+
+20. `getPageOutline` lists every heading in document order (including ones
+    beyond `$conf['maxseclevel']`), with byte ranges in core's own
+    `rawWikiSlices()` format; `getSection` resolves by index, range, `#hid`,
+    or title (with/without nested children) and refuses an ambiguous title
+    by name; `getLines`/`findInPage` work the same way for pages without
+    useful headings. A `====== fake ======` line inside a `<code>` block
+    must not be treated as a section boundary. A range from `getPageOutline`
+    fed into the browser's own `do=edit&range=...` link loads byte-identical
+    text to what `getSection` returned for it.
+21. `searchWithContext` finds a match in a live page *and* in the caller's
+    own unreviewed draft in one call (unlike `core.searchPages`, which never
+    sees the draft — ADR-0004), reporting which is which; `scope=live`
+    narrows to only the former.
+
+### Author-side change lifecycle (Phase 10, ADR-0006)
+
+22. The central regression this phase exists to fix: `kail` uses a range
+    write tool (e.g. `replaceSection`) on a page for the first time →
+    `status=queued`, a new pending change id. A second range write on the
+    *same* page → `status=updated`, the *same* change id — `listMyPending`
+    still shows exactly one entry for that page. Approving it publishes both
+    edits together. A stale `$expect` (section/line hash) is refused;
+    `replaceLines` refuses a missing `$expect` outright; `replaceText`
+    refuses an ambiguous match unless `$all` is set; a range write that
+    would empty the page is refused (that goes through `core.savePage`
+    instead); a caller not subject to review (`martin`) gets `status=live`
+    immediately, no queue entry.
+23. `updatePendingChange` replaces the full text of the author's own open
+    change in place (same id, `updateCount` incremented, admin queue shows
+    an "updated N× " notice); a fail-closed write failure here leaves the
+    previous content intact and reported accurately, same guarantee as
+    scenario 17.
+24. `withdrawPendingChange`: the author cancels their own still-`pending`
+    change → `state=withdrawn`, removed from `listMyPending` and the admin
+    queue, but still visible via `getStatus` (distinct from `rejected`: no
+    `reviewer` is recorded). Only the author may withdraw it — not even a
+    reviewer, via `checkOwnChangeAccess`'s stricter rule than
+    `checkChangeAccess`. A `conflicted` or already-decided change cannot be
+    withdrawn.
+
 ### Security
 
 14. `kail` tries to approve their own pending change via

@@ -25,6 +25,7 @@ $lang['banner']      = 'Für diese Seite liegen %d offene Änderung(en) zur Prü
 $lang['banner_link'] = 'Review-Warteschlange öffnen';
 
 $lang['stacked_notice'] = 'Vorsicht: Für diese Seite liegen %d ungeprüfte Änderungen vor (#%s), die jeweils auf der Live-Fassung basieren und nicht aufeinander. Werden mehrere freigegeben, überschreiben die späteren die früheren. Bitte einzeln prüfen und die nicht gewünschten ablehnen.';
+$lang['updated_notice'] = 'Der Autor/die Autorin hat diese Änderung seit der Einreichung %d-mal fortgeführt, zuletzt am %s. Unten steht die aktuelle Fassung.';
 
 $lang['resolved']      = 'Änderung #%d aufgelöst und veröffentlicht.';
 $lang['resolve_label'] = 'Aufgelöster Seitentext (Konfliktmarker entfernen und stehen lassen, was auf der Seite stehen soll)';

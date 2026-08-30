@@ -43,10 +43,13 @@ class helper_plugin_reviewqueue_store extends Plugin
             'reviewedAt'  => null,
             'comment'     => null,
             'mergeResult' => null,
+            'updated'     => null,
+            'updateCount' => 0,
         ];
         $record['id']      = $id;
         $record['created'] = time();
         $record['state']   = 'pending';
+        $record['contentHash'] = $this->contentHash($content);
 
         $ok = io_saveFile($this->queueFile($id, 'json'), json_encode(
             $record,
@@ -139,7 +142,6 @@ class helper_plugin_reviewqueue_store extends Plugin
 
     /**
      * Overwrite a pending change's metadata, e.g. when transitioning state.
-     * Content is immutable once queued (a re-edit is a new pending change).
      *
      * @param array $record full record as previously returned by get(), with
      *                       updated fields
@@ -155,6 +157,85 @@ class helper_plugin_reviewqueue_store extends Plugin
         if (!$ok) {
             throw new \RuntimeException("reviewqueue: failed to update pending change #$id");
         }
+    }
+
+    /**
+     * Replace the proposed text of a still-open pending change in place,
+     * instead of it staying immutable and every further edit becoming a new
+     * queue entry (see docs/design/adr-0006). Only the content and the
+     * bookkeeping fields ($metaPatch, plus updated/updateCount/contentHash)
+     * change - base/baseRev/baseHash/created are left untouched, so the
+     * reviewer's diff and the three-way merge keep their original anchor
+     * regardless of how many times the author has continued the draft.
+     *
+     * @param int $id
+     * @param string $content the new full proposed text
+     * @param array $metaPatch fields to overwrite on the record besides the content bookkeeping, e.g. summary
+     * @throws \RuntimeException the change is not open for update, or any storage failure
+     */
+    public function updateContent($id, $content, array $metaPatch = [])
+    {
+        $id = (int) $id;
+        $jsonFile = $this->queueFile($id, 'json');
+
+        // Locked exactly like nextId(): io_saveFile() on this same path
+        // would re-lock it and stall for the full 3-second timeout, so the
+        // metadata write below goes straight to disk while this lock is
+        // already held.
+        io_lock($jsonFile);
+        try {
+            if (!file_exists($jsonFile)) {
+                throw new \RuntimeException("reviewqueue: change #$id is not open for update");
+            }
+            $record = json_decode(io_readFile($jsonFile), true);
+            if (!is_array($record) || $record['state'] !== 'pending') {
+                throw new \RuntimeException("reviewqueue: change #$id is not open for update");
+            }
+
+            if (!io_saveFile($this->queueFile($id, 'content'), $content)) {
+                throw new \RuntimeException("reviewqueue: failed to update content for change #$id");
+            }
+
+            $record = $metaPatch + $record;
+            $record['updated']     = time();
+            $record['updateCount'] = ($record['updateCount'] ?? 0) + 1;
+            $record['contentHash'] = $this->contentHash($content);
+
+            $written = @file_put_contents($jsonFile, json_encode(
+                $record,
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            ));
+            if ($written === false) {
+                throw new \RuntimeException("reviewqueue: failed to update change #$id");
+            }
+        } finally {
+            io_unlock($jsonFile);
+        }
+    }
+
+    /**
+     * The author withdraws one of their own still-open pending changes -
+     * the author's counterpart to reject(), without a reviewer's decision
+     * (see docs/design/adr-0006). Moves straight to archive/ like any other
+     * terminal state, so the reviewer can still see it happened.
+     *
+     * @param int $id
+     * @param string $reason shown back to the author via getStatus(), same field a rejection uses
+     * @throws \RuntimeException the change is not open for withdrawal, or any storage failure
+     */
+    public function withdraw($id, $reason)
+    {
+        $record = $this->get((int) $id);
+        if (!$record || $record['state'] !== 'pending') {
+            throw new \RuntimeException("reviewqueue: change #$id is not open for withdrawal");
+        }
+
+        $record['state']      = 'withdrawn';
+        $record['comment']    = (string) $reason;
+        $record['reviewer']   = null;
+        $record['reviewedAt'] = time();
+        $this->update($record);
+        $this->archive($record['id']);
     }
 
     /**
@@ -253,6 +334,21 @@ class helper_plugin_reviewqueue_store extends Plugin
             return $a['created'] <=> $b['created'];
         });
         return $records;
+    }
+
+    /**
+     * Short content-addressed hash for a record's "contentHash" field, kept
+     * in the same format helper_plugin_reviewqueue_range::hash() returns so
+     * a caller never has to reconcile two different hash conventions.
+     *
+     * @param string $content
+     * @return string 12 hex characters
+     */
+    protected function contentHash($content)
+    {
+        /** @var helper_plugin_reviewqueue_range $range */
+        $range = $this->loadHelper('reviewqueue_range');
+        return $range->hash($content);
     }
 
     /**

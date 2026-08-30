@@ -30,6 +30,26 @@ class action_plugin_reviewqueue_save extends ActionPlugin
     /** @var bool */
     protected static $isBrowserSaveAct = false;
 
+    /**
+     * Set by a range write tool (remote.php) immediately before it calls
+     * ApiCore::savePage(), so handleWikipageSave() below continues that
+     * author's existing open change for this page instead of stacking a new
+     * one - see docs/design/adr-0006. Null outside of that call.
+     *
+     * @var array{target:string,updateId:int}|null
+     */
+    public static $rangeIntent = null;
+
+    /**
+     * Filled in by handleWikipageSave() for a range-write-tool-initiated
+     * save, read back by the tool once ApiCore::savePage() returns. Null
+     * means the save was not intercepted at all (the caller is not subject
+     * to review, or it was a genuine no-op) - i.e. the page is now live.
+     *
+     * @var array{status:string,pendingId:int,target:string}|null
+     */
+    public static $rangeResult = null;
+
     public function register(EventHandler $controller)
     {
         $controller->register_hook('ACTION_ACT_PREPROCESS', 'BEFORE', $this, 'handleActPreprocess');
@@ -94,7 +114,24 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         if ($policy->isApplying()) return; // our own approval flow replaying a save
 
         $data = &$event->data;
-        if (!$data['contentChanged']) return; // no-op save, nothing to hold back
+
+        // A range write tool (remote.php) sets this immediately before
+        // calling ApiCore::savePage(), naming the page and - if it read an
+        // existing open draft as its base - that draft's id, so this
+        // continues that draft in place instead of stacking a new one (see
+        // docs/design/adr-0006). Read this before the contentChanged check
+        // below: that check compares the new text against the LIVE page,
+        // but a range write that continues a draft can legitimately
+        // reproduce the live text exactly (e.g. undoing, within the draft,
+        // an addition the draft itself made) while still needing to be
+        // written back to the DRAFT - whose own content is what actually
+        // matters here, not whether it happens to match the live page.
+        $intent = self::$rangeIntent;
+        $continuing = $intent !== null
+            && $intent['target'] === $data['id']
+            && $intent['updateId'] > 0;
+
+        if (!$data['contentChanged'] && !$continuing) return; // no-op save, nothing to hold back
 
         global $INPUT;
         $user = $INPUT->server->str('REMOTE_USER');
@@ -131,11 +168,37 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         ]);
 
         try {
-            $id = $store->enqueue($meta, $data['newContent'], $data['oldContent']);
+            if ($continuing) {
+                // An empty summary on this particular continuation should
+                // not blank out a good one an earlier call already set -
+                // same "empty means keep the existing one" rule
+                // updatePendingChange() uses.
+                $metaPatch = $data['summary'] !== '' ? ['summary' => $data['summary']] : [];
+                $store->updateContent($intent['updateId'], $data['newContent'], $metaPatch);
+                $id = $intent['updateId'];
+                $status = 'updated';
+            } else {
+                $id = $store->enqueue($meta, $data['newContent'], $data['oldContent']);
+                $status = 'queued';
+            }
             $failure = null;
         } catch (\Throwable $e) {
             $id = null;
             $failure = $e;
+        }
+
+        if ($intent !== null && $intent['target'] === $data['id']) {
+            // Report the outcome as a plain return value instead of the
+            // throw-as-success-signal convention below - that convention
+            // exists only because core.savePage/appendPage have no other
+            // channel back to a generic RPC caller (ADR-0003). Our own
+            // range write tools call ApiCore::savePage() themselves and can
+            // just read this back once it returns.
+            if ($failure) {
+                throw new RemoteException($this->getLang('queue_failed'), 500, $failure);
+            }
+            self::$rangeResult = ['status' => $status, 'pendingId' => $id, 'target' => $data['id']];
+            return;
         }
 
         if (self::$isBrowserSaveAct) {
