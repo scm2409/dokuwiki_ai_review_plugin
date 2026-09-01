@@ -1,67 +1,63 @@
 import { test, expect } from '@playwright/test';
-import * as fs from 'fs';
-import * as path from 'path';
+import { tokens, rpc, JSONRPC_ENDPOINT } from './_helpers';
 
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+// Covers strategy.md scenarios 1/2 (queued) and 7/9 (martin unaffected).
+//
+// The transport half of this changed with ADR-0007: kail no longer reaches
+// lib/exe/jsonrpc.php at all, so "the remote API holds the change back" is now
+// tested where kail actually calls it - our own MCP endpoint - while the
+// JSON-RPC path is tested for being refused outright.
 
-// Covers strategy.md scenarios 1/2 (queued) and 7/9 (martin unaffected) via
-// JSON-RPC, plus the MCP equivalent of the same interception.
-
-test('JSON-RPC: kail savePage is rejected with a review id, page stays unpublished', async ({
-  request,
-}) => {
-  const pageId = `apicreate${Date.now()}`;
-  const res = await request.post('/lib/exe/jsonrpc.php', {
+test('kail is refused on core JSON-RPC entirely', async ({ request }) => {
+  // The confinement ADR-0007 rests on: core's own endpoint has no per-method
+  // gate, so a confined account must not reach it at all. Without this the
+  // whole tool allowlist would be decorative.
+  const res = await request.post(JSONRPC_ENDPOINT, {
     headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: {
-      jsonrpc: '2.0',
-      method: 'core.savePage',
-      params: { page: pageId, text: 'kail api content', summary: 'api test' },
-      id: 1,
-    },
+    data: { jsonrpc: '2.0', method: 'core.whoAmI', params: [], id: 1 },
   });
-  const body = await res.json();
-  expect(body.error).toBeTruthy();
-  expect(body.error.message).toMatch(/submitted for review as change #\d+/);
+
+  expect(res.status()).toBe(403);
+  expect(await res.text()).not.toContain('kail');
+});
+
+test('MCP: kail createPage is queued, the page stays unpublished', async ({ request }) => {
+  const pageId = `apicreate${Date.now()}`;
+  const res = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
+    page: pageId,
+    text: 'kail api content',
+    summary: 'api test',
+  });
+
+  expect(res.result.status).toBe('queued');
+  expect(res.result.pendingId).toBeGreaterThan(0);
 
   const page = await request.get(`/doku.php?id=${pageId}`);
   expect(await page.text()).not.toContain('kail api content');
 });
 
+test('MCP: kail cannot call core.savePage at all', async ({ request }) => {
+  // The range write tools plus createPage replace it, so it is off the
+  // allowlist - and refused on tools/call, not merely hidden from tools/list.
+  const res = await rpc(request, tokens.kail, 'core.savePage', {
+    page: `apibypass${Date.now()}`,
+    text: 'should never be written',
+    summary: 'x',
+  });
+
+  expect(res.error).toBeTruthy();
+  expect(res.error!.message).toMatch(/no tool called core_savePage/);
+});
+
 test('JSON-RPC: martin savePage goes straight through', async ({ request }) => {
   const pageId = `apimartintest${Date.now()}`;
-  const res = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.martin}`, 'Content-Type': 'application/json' },
-    data: {
-      jsonrpc: '2.0',
-      method: 'core.savePage',
-      params: { page: pageId, text: 'martin api content', summary: 'api test' },
-      id: 1,
-    },
+  const res = await rpc(request, tokens.martin, 'core.savePage', {
+    page: pageId,
+    text: 'martin api content',
+    summary: 'api test',
   });
-  const body = await res.json();
-  expect(body.result).toBe(true);
+  expect(res.result).toBe(true);
 
   const page = await request.get(`/doku.php?id=${pageId}`);
   expect(await page.text()).toContain('martin api content');
-});
-
-test('MCP: kail tools/call core_savePage returns isError with a review id', async ({
-  request,
-}) => {
-  const pageId = `mcpcreate${Date.now()}`;
-  const res = await request.post('/lib/plugins/mcp/mcp.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: {
-      jsonrpc: '2.0',
-      method: 'tools/call',
-      params: { name: 'core_savePage', arguments: { page: pageId, text: 'x', summary: 'x' } },
-      id: 1,
-    },
-  });
-  const body = await res.json();
-  expect(body.result.isError).toBe(true);
-  expect(body.result.content[0].text).toMatch(/submitted for review as change #\d+/);
 });

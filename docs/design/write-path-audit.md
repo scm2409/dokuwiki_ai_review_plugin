@@ -83,6 +83,25 @@ ever touch a queue entry the caller already authored and that has not been revie
 (`checkOwnChangeAccess()`), so they can never publish anything - `lockdown.api.spec.ts`
 lists them separately as `own-queue`.
 
+## Phase 11 addendum: the read path is now governed too
+
+This audit covers writes. [ADR-0007](adr-0007-agent-confinement.md) added the
+matching treatment for reads and for the transports themselves: a review-scoped
+account is confined by an allowlist at three gates (entry script, `do=` action,
+MCP tool), so the "not covered" note above is narrower than it was.
+
+In particular, **"remote API methods from third-party plugins" is now closed** for
+such an account: `lib/exe/jsonrpc.php` and `lib/exe/xmlrpc.php` are refused
+outright, and our own endpoint serves only allowlisted methods, so a writing
+`RemotePlugin` method installed later is unreachable rather than merely
+undetected. `lockdown.api.spec.ts` still enumerates the whole surface — now from
+core's own OpenAPI spec rather than a tool list — and asserts each method is
+either audited or refused by name.
+
+`core.savePage`/`appendPage` are no longer reachable either; `createPage`,
+`deletePage` and the range writes replace them and all end in the same
+`ApiCore::savePage()` call, so every row of the table above still holds.
+
 Additional operational safeguards, see [`../usage.md`](../usage.md):
 
 - keep the ACL for the review-required account as tight as possible (no `AUTH_DELETE`

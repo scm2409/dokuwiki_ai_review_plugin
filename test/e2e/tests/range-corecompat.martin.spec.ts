@@ -1,25 +1,13 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc } from './_helpers';
 
 // docs/design/adr-0005 claims getPageOutline's "range" values are the exact
 // same "from-to" byte format DokuWiki's own section-edit buttons use
 // (rawWikiSlices()/con() in inc/common.php) - not a re-derived approximation.
 // This needs a real, authenticated browser session (martin's), so it lives
 // separately from range-read.api.spec.ts's unauthenticated api project.
-
-function rpc(request: any, token: string, method: string, params: any = []) {
-  return request
-    .post('/lib/exe/jsonrpc.php', {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      data: { jsonrpc: '2.0', method, params, id: 1 },
-    })
-    .then((r: any) => r.json());
-}
 
 test("a getSection range matches the browser's own section-edit link byte-for-byte", async ({
   page,

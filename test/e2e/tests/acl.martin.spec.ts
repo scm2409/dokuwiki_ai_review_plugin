@@ -2,10 +2,7 @@ import { test, expect } from '@playwright/test';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc } from './_helpers';
 
 const CONTAINER = 'reviewqueue-test-dokuwiki';
 const ACL = '/var/www/html/conf/acl.auth.php';
@@ -17,15 +14,6 @@ const ACL = '/var/www/html/conf/acl.auth.php';
 
 function inContainer(...args: string[]) {
   return execFileSync('podman', ['exec', CONTAINER, ...args], { encoding: 'utf-8' });
-}
-
-function rpc(request: any, token: string, method: string, params: any = []) {
-  return request
-    .post('/lib/exe/jsonrpc.php', {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      data: { jsonrpc: '2.0', method, params, id: 1 },
-    })
-    .then((r: any) => r.json());
 }
 
 test.describe('secret namespace martin cannot read', () => {
@@ -50,13 +38,13 @@ test.describe('secret namespace martin cannot read', () => {
     const pageId = `secret:doc${Date.now()}`;
     const marker = 'confidential draft body';
 
-    const res = await rpc(request, tokens.kail, 'core.savePage', {
+    const res = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
       page: pageId,
       text: marker,
       summary: 'secret',
     });
-    expect(res.error.message).toMatch(/submitted for review/);
-    const rqid = Number(/change #(\d+)/.exec(res.error.message)![1]);
+    expect(res.result.status).toBe('queued');
+    const rqid = res.result.pendingId as number;
 
     // Not listed in the admin queue, and its content is not on the page.
     await page.goto('/doku.php?do=admin&page=reviewqueue');
@@ -87,12 +75,12 @@ test.describe('secret namespace martin cannot read', () => {
     request,
   }) => {
     const pageId = `secret:mine${Date.now()}`;
-    const res = await rpc(request, tokens.kail, 'core.savePage', {
+    const res = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
       page: pageId,
       text: 'my own secret draft',
       summary: 's',
     });
-    const rqid = Number(/change #(\d+)/.exec(res.error.message)![1]);
+    const rqid = res.result.pendingId as number;
 
     const own = await rpc(request, tokens.kail, 'plugin.reviewqueue.getPendingText', { id: rqid });
     expect(own.result).toBe('my own secret draft');

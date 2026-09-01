@@ -1,13 +1,19 @@
 # Test environment for the reviewqueue plugin: DokuWiki release-2024-02-06b
-# ("Kaos") pinned exactly, plus the splitbrain/dokuwiki-plugin-mcp plugin
-# pinned to a fixed commit, so that test runs are reproducible.
+# ("Kaos") pinned exactly, so that test runs are reproducible.
+#
+# splitbrain/dokuwiki-plugin-mcp is deliberately NOT installed. It serves the
+# entire remote API as MCP tools with no way to restrict it, which is exactly
+# what ADR-0007 replaced: reviewqueue brings its own endpoint
+# (lib/plugins/reviewqueue/mcp.php) serving only allowlisted tools. Installing
+# both would leave the unrestricted surface reachable and make the whole
+# confinement cosmetic, so the test environment mirrors the required
+# production layout and ships only ours.
 #
 # Not for production use - seeded with fixed, weak test credentials.
 
 FROM php:8.2-apache
 
 ARG DOKUWIKI_VERSION=2024-02-06b
-ARG MCP_PLUGIN_COMMIT=c44faefa170c63435ccd19c3a25e84e2e2a24c53
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
@@ -35,12 +41,6 @@ WORKDIR /var/www/html
 RUN curl -fsSL "https://download.dokuwiki.org/src/dokuwiki/dokuwiki-${DOKUWIKI_VERSION}.tgz" -o /tmp/dokuwiki.tgz \
     && tar -xzf /tmp/dokuwiki.tgz --strip-components=1 -C /var/www/html \
     && rm /tmp/dokuwiki.tgz
-
-# --- mcp plugin, pinned to a fixed commit (not master) for reproducibility ---
-RUN mkdir -p lib/plugins/mcp \
-    && curl -fsSL "https://github.com/splitbrain/dokuwiki-plugin-mcp/archive/${MCP_PLUGIN_COMMIT}.tar.gz" -o /tmp/mcp.tgz \
-    && tar -xzf /tmp/mcp.tgz --strip-components=1 -C lib/plugins/mcp \
-    && rm /tmp/mcp.tgz
 
 # --- our own plugin (baseline copy; overridden by a bind mount in up.sh for live dev) ---
 RUN mkdir -p lib/plugins/reviewqueue

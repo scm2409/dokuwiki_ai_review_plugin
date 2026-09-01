@@ -551,16 +551,126 @@ class remote_plugin_reviewqueue extends RemotePlugin
             foreach ($this->myPending() as $record) {
                 $need = ($record['type'] ?? 'page') === 'media' ? AUTH_UPLOAD : AUTH_READ;
                 if (auth_quickaclcheck($record['target']) < $need) continue;
-                if (++$count > self::SEARCH_MAX_PAGES) break;
 
                 $text = $store->getContent($record['id']);
                 $hits = array_slice($range->findInText($text, $query, $context), 0, self::SEARCH_MAX_HITS_PER_PAGE);
                 if (!$hits) continue;
+
+                // Cap the number of *matches*, not the number of drafts looked
+                // at. myPending() is oldest-first, so counting every record
+                // examined meant an author with more than SEARCH_MAX_PAGES open
+                // drafts stopped finding their newest ones - which is exactly
+                // the work searchMyPending/searchWithContext exist to surface
+                // (ADR-0004). searchMyPending scans them all and had no such
+                // cap, so the two disagreed about what the author owns.
+                if (++$count > self::SEARCH_MAX_PAGES) break;
                 $results[] = ['page' => $record['target'], 'source' => 'pending', 'pendingId' => $record['id'], 'hits' => $hits];
             }
         }
 
         return $results;
+    }
+
+    /**
+     * Create a page that does not exist yet.
+     *
+     * This is the only way to bring a new page into being; every other write tool addresses a
+     * range of something already there. Like all of them, the result goes into the review queue
+     * rather than live, unless you are not subject to review.
+     *
+     * Refused if the page already exists, or if you already have an open draft creating it -
+     * read it with getPageToEdit and continue it with the range write tools instead, so you
+     * don't stack a second unreviewed change on top of your own (see docs/design/adr-0004).
+     *
+     * Returns "status" ("live" if you are not subject to review and this published immediately,
+     * "queued" if this created a pending change), "pendingId" (0 for "live"), and "target".
+     *
+     * @param string $page page id for the new page
+     * @param string $text the full text of the new page
+     * @param string $summary edit summary
+     * @return array the write outcome, see above
+     * @throws AccessDeniedException no create access for page
+     * @throws RemoteException page already exists, a draft for it is already open, or empty text
+     */
+    public function createPage($page, $text, $summary = '')
+    {
+        $page = cleanID($page);
+        if ($page === '') throw new RemoteException('No page id given', 131);
+
+        // Creating needs more than the read access checkPageAccess() asks for.
+        if (auth_quickaclcheck($page) < AUTH_CREATE) {
+            throw new AccessDeniedException('You are not allowed to create this page', 111);
+        }
+
+        if (page_exists($page)) {
+            throw new RemoteException(
+                "Page '$page' already exists - read it with getPageToEdit and change it with " .
+                'replaceSection, replaceLines or replaceText instead',
+                121
+            );
+        }
+
+        $mine = $this->myPendingFor($page);
+        if ($mine) {
+            $open = end($mine);
+            throw new RemoteException(
+                "You already have unreviewed change #{$open['id']} creating '$page' - continue it " .
+                'with the range write tools or updatePendingChange instead of stacking another one',
+                121
+            );
+        }
+
+        return $this->writeEffectiveText($page, (string) $text, 0, $summary);
+    }
+
+    /**
+     * Propose deleting a page.
+     *
+     * Deleting is a reviewable intent like any other, so this goes into the queue rather than
+     * removing anything: approving the change is what actually deletes the page. Every other
+     * write tool refuses to empty a page, precisely so that a deletion is always something you
+     * asked for on purpose rather than the accidental result of replacing a range with nothing.
+     *
+     * Refused if the page does not exist, or if you already have an open draft for it - decide
+     * what that draft should be first (withdrawPendingChange if you no longer want it).
+     *
+     * Returns "status" ("live" if you are not subject to review and this deleted immediately,
+     * "queued" if this created a pending change), "pendingId" (0 for "live"), and "target".
+     *
+     * @param string $page page id to delete
+     * @param string $summary edit summary, ideally saying why
+     * @return array the write outcome, see above
+     * @throws AccessDeniedException no delete access for page
+     * @throws RemoteException page does not exist, or a draft for it is already open
+     */
+    public function deletePage($page, $summary = '')
+    {
+        $page = cleanID($page);
+        if ($page === '') throw new RemoteException('No page id given', 131);
+
+        if (auth_quickaclcheck($page) < AUTH_DELETE) {
+            throw new AccessDeniedException('You are not allowed to delete this page', 111);
+        }
+
+        if (!page_exists($page)) {
+            throw new RemoteException("Page '$page' does not exist, so there is nothing to delete", 121);
+        }
+
+        $mine = $this->myPendingFor($page);
+        if ($mine) {
+            $open = end($mine);
+            throw new RemoteException(
+                "You already have unreviewed change #{$open['id']} for '$page' - withdraw it with " .
+                'withdrawPendingChange before proposing a deletion, so the reviewer is not left ' .
+                'with two conflicting proposals for the same page',
+                121
+            );
+        }
+
+        // An empty text is how DokuWiki itself expresses a deletion, and how
+        // the queue has always recorded one (see docs/design/spec.md) - the
+        // difference is only that asking for it is explicit here.
+        return $this->writeEffectiveText($page, '', 0, $summary, true);
     }
 
     /**
@@ -942,7 +1052,7 @@ class remote_plugin_reviewqueue extends RemotePlugin
         }
 
         if (!page_exists($page)) {
-            throw new RemoteException("Page '$page' does not exist - use core.savePage to create it", 121);
+            throw new RemoteException("Page '$page' does not exist - use createPage to create it", 121);
         }
         return ['text' => rawWiki($page), 'source' => 'live', 'pendingId' => 0];
     }
@@ -1034,7 +1144,7 @@ class remote_plugin_reviewqueue extends RemotePlugin
     {
         if (trim((string) $newText) !== '') return;
         throw new RemoteException(
-            "That would leave '$page' empty - to delete a page, use core.savePage with an empty text instead",
+            "That would leave '$page' empty - if you mean to delete the page, use deletePage instead",
             131
         );
     }
@@ -1065,13 +1175,14 @@ class remote_plugin_reviewqueue extends RemotePlugin
      * @param string $newText the full new page text
      * @param int $updateId the author's open pending change id to continue, or 0 for none
      * @param string $summary edit summary
+     * @param bool $allowEmpty true only for deletePage, the one caller that means an empty text
      * @return array "status" (live, queued, or updated), "pendingId", "target"
      * @throws AccessDeniedException no write access for page, or the page is locked
      * @throws RemoteException the page is locked, blocked, would be an empty new page, or the queue failed to write
      */
-    protected function writeEffectiveText($page, $newText, $updateId, $summary)
+    protected function writeEffectiveText($page, $newText, $updateId, $summary, $allowEmpty = false)
     {
-        $this->refuseEmptyPage($newText, $page);
+        if (!$allowEmpty) $this->refuseEmptyPage($newText, $page);
 
         action_plugin_reviewqueue_save::$rangeIntent = ['target' => $page, 'updateId' => (int) $updateId];
         action_plugin_reviewqueue_save::$rangeResult = null;

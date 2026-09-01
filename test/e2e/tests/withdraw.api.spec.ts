@@ -1,34 +1,10 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc, queueAsKail, saveAsMartin } from './_helpers';
 
 // docs/design/adr-0006: the author's own withdraw/continue lifecycle.
 // Covers strategy.md scenario 24.
-
-function rpc(request: any, token: string, method: string, params: any = []) {
-  return request
-    .post('/lib/exe/jsonrpc.php', {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      data: { jsonrpc: '2.0', method, params, id: 1 },
-    })
-    .then((r: any) => r.json());
-}
-
-async function saveAsMartin(request: any, page: string, text: string, summary = 'setup') {
-  const res = await rpc(request, tokens.martin, 'core.savePage', { page, text, summary });
-  expect(res.result).toBe(true);
-}
-
-async function queueAsKail(request: any, pageId: string, text: string, summary = 's') {
-  const res = await rpc(request, tokens.kail, 'core.savePage', { page: pageId, text, summary });
-  const match = /change #(\d+)/.exec(res.error.message);
-  if (!match) throw new Error(`expected a queue rejection, got ${JSON.stringify(res)}`);
-  return Number(match[1]);
-}
 
 function cookieHeaderFor(user: string) {
   const storage = JSON.parse(

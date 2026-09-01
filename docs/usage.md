@@ -75,18 +75,48 @@ changes are lost — they are, after all, deliberately not yet a revision.
 See [`../INSTALL.md`](../INSTALL.md). Key point: empty the queue before
 removing the plugin, otherwise pending changes will never be published.
 
+## What a review-scoped account can and cannot do
+
+Since [ADR-0007](design/adr-0007-agent-confinement.md) such an account is confined
+to a capability allowlist on **every** path — MCP, remote API and browser alike —
+not just held back on writes.
+
+**It can:** read current pages, search, browse the index, read and upload media,
+edit and save (into the queue), and use the `plugin.reviewqueue.*` tools including
+`createPage` and `deletePage`.
+
+**It cannot:** see page or media **history** by any route (`do=revisions`, `do=diff`,
+`do=recent`, `?rev=`, `?at=`, `feed.php`, `core.getPageHistory`, the media-diff ajax
+calls — all refused); reach `lib/exe/jsonrpc.php` or `lib/exe/xmlrpc.php` at all;
+change its own profile or password; or call any remote method outside the allowlist,
+including ones a plugin installed later might add.
+
+A **human** placed under review is confined identically. That is the price of a
+single policy — which accounts pay it is a configuration decision (`review_users`).
+
 ## Keeping the agent's account as narrow as possible
 
-The plugin intercepts every write path that DokuWiki itself offers (see
-[`design/write-path-audit.md`](design/write-path-audit.md)). Two things, however,
-lie outside its reach and should be secured via configuration:
+The plugin intercepts every write path DokuWiki offers (see
+[`design/write-path-audit.md`](design/write-path-audit.md)) and confines every read
+path it can reach. Beyond that:
 
 - **Keep ACLs tight.** If the account doesn't need delete rights, give it `AUTH_UPLOAD`
   (8) instead of `AUTH_DELETE` (16). Changes go through the queue regardless; tight
   permissions are the second line of defense.
-- **`$conf['remoteuser']`** should be limited to the accounts that actually
-  need the remote API. Third-party plugins can bring their own writing API methods,
-  and DokuWiki has no interception point for that.
+- **`$conf['remoteuser']`** should still be limited to the accounts that actually
+  need the remote API.
+- **Give the agent no password it knows** — only an API token. Its browser routes are
+  confined anyway, but an account that cannot log in interactively cannot be driven
+  through the browser at all.
+- **Optional, outside the plugin's reach:** blocking `lib/exe/jsonrpc.php` and
+  `lib/exe/xmlrpc.php` at the web server for the agent's source address. The plugin
+  already refuses them in PHP, after `init.php`; a web-server rule refuses them before
+  PHP starts. Belt and braces, not a requirement.
+
+Confinement applies only where DokuWiki authenticated someone. The five entry scripts
+that skip authentication (`css.php`, `js.php`, `jquery.php`, `manifest.php`,
+`opensearch.php`) are exactly the ones carrying no wiki content, so nothing is lost —
+but an unauthenticated request is governed by your ACLs like any anonymous visitor's.
 
 ## Security properties
 

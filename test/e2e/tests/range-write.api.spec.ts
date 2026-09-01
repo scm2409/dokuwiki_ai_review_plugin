@@ -1,30 +1,13 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc, saveAsMartin } from './_helpers';
 
 // Phase 10 (docs/design/adr-0005, adr-0006): write tools that change part of
 // a page instead of resubmitting the whole thing, and - the actual problem
 // this phase exists to fix - continue the author's own open draft in place
 // instead of stacking a new queue entry every time. Covers strategy.md
 // scenarios 22-23.
-
-function rpc(request: any, token: string, method: string, params: any = []) {
-  return request
-    .post('/lib/exe/jsonrpc.php', {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      data: { jsonrpc: '2.0', method, params, id: 1 },
-    })
-    .then((r: any) => r.json());
-}
-
-async function saveAsMartin(request: any, page: string, text: string, summary = 'setup') {
-  const res = await rpc(request, tokens.martin, 'core.savePage', { page, text, summary });
-  expect(res.result).toBe(true);
-}
 
 function cookieHeaderFor(user: string) {
   const storage = JSON.parse(
@@ -310,12 +293,12 @@ test('approving a change refuses when the author changed it after this page was 
   // the reviewer loading the admin page and clicking Approve would get
   // text published that the reviewer never actually saw.
   const pageId = `rwtoctou${Date.now()}`;
-  const queued = await rpc(request, tokens.kail, 'core.savePage', {
+  const queued = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
     page: pageId,
     text: 'original text',
     summary: 'v1',
   });
-  const rqid = Number(/change #(\d+)/.exec(queued.error.message)![1]);
+  const rqid = queued.result.pendingId as number;
 
   // martin "opens" the admin page (capturing the rqhash it renders)...
   const cookie = cookieHeaderFor('martin');

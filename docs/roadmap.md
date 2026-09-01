@@ -15,6 +15,7 @@ Status anchor across sessions. Read this before starting a new work session.
 | 8 | remote.php + MCP verification | ✅ done | `main` | moved up due to ADR-0004; 4 MCP tools verified live |
 | 9 | Hardening, security review, docs | ✅ done | `main` | ACL gap closed, CLI, usage.md, 46 tests |
 | 10 | Range-addressed access + author change lifecycle | ✅ done | `phase-10-page-ranges` | ADR-0005/ADR-0006; 12 new remote methods, 81/81 tests green |
+| 11 | Agent confinement (capability allowlist) | ✅ done | `phase-11-agent-confinement` | ADR-0007; own MCP endpoint, 3 gates, 107/107 tests green |
 
 The original plan (phases 0-9) is located at
 `/home/martin/.claude/plans/ber-neues-projekt-starten-atomic-feigenbaum.md`. Phase 10's
@@ -44,6 +45,37 @@ verified byte-for-byte against the browser's own section-edit links). `skills/do
 was substantially rewritten for the new tools. Deliberately deferred, not part of this
 phase: moving a section *across* pages (needs a "linked changes" concept so both halves
 are approved together) and a regex grep over `data/pages/` directly.
+
+**Phase 11 (2026-09-01):** [`design/adr-0007-agent-confinement.md`](design/adr-0007-agent-confinement.md).
+Motivated by two operator requirements the plugin did not meet: the MCP tool list was
+everything the wiki has (53 tools on a production install, pure context cost), and a
+review-scoped account could read anything on any transport — page history included —
+because only the *write* path was ever governed. Confinement now lives in
+`helper/capability.php` and is enforced at three gates that all ask it:
+`action/entrypoint.php` (`DOKUWIKI_INIT_DONE` — entry-script allowlist plus one
+`rev`/`at` check that closes page *and* media history on every script at once),
+`action/save.php` (the trimmed `do=` allowlist, its list moved into the helper), and our
+own MCP endpoint (`plugin/mcp.php`, `meta/McpServer.php`, `meta/ToolSchema.php`, adapted
+from `splitbrain/dokuwiki-plugin-mcp`, GPL-2) which refuses a non-allowlisted
+`tools/call` rather than merely hiding it. **The splitbrain `mcp` plugin must be
+uninstalled** — while it is installed it serves the unrestricted surface next to ours.
+
+Dropping `core.savePage` left two gaps that the range tools structurally cannot fill,
+both closed with dedicated tools rather than by restoring it: `createPage` (a range tool
+has no range to address on a page that does not exist; auto-creating would turn a typo in
+a page id into a silent orphan page) and `deletePage` (every write tool refuses to empty a
+page on purpose, so a deletion should be explicit). Both refuse to stack on an open draft,
+enforcing ADR-0004's rule instead of only warning about it — which means stacking is now
+reachable *only* through the browser edit form, where its warnings are still tested.
+
+Also fixed here, found while testing: `searchWithContext`'s `SEARCH_MAX_PAGES` cap counted
+pending records *examined* rather than *matches*, and `myPending()` is oldest-first, so an
+author with more than 20 open drafts silently stopped finding their newest ones.
+`ToolSchema` additionally guarantees an array schema always carries `items` — core's
+generator omits it for a bare `array` docblock, and Google's Gemini API rejects the entire
+request over one such schema. Deliberately **not** done: a `restrict_ui` switch (browser
+editing stays, those edits are queued) and web-server-level blocking (outside a plugin's
+reach; noted in `usage.md` as optional hardening).
 
 ## Decided questions
 

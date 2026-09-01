@@ -152,7 +152,7 @@ class ToolSchema extends OpenAPIGenerator
         $summary = trim((string) $call->getSummary());
 
         $readOnly = !in_array($name, [
-            'saveMedia', 'deleteMedia',
+            'saveMedia', 'deleteMedia', 'createPage', 'deletePage',
             'updatePendingChange', 'withdrawPendingChange',
             'replaceSection', 'insertSection', 'deleteSection',
             'replaceLines', 'replaceText',

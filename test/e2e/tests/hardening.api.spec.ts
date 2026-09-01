@@ -2,10 +2,7 @@ import { test, expect } from '@playwright/test';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc, mcpCall, mcpToolsList } from './_helpers';
 
 const CONTAINER = 'reviewqueue-test-dokuwiki';
 
@@ -18,28 +15,21 @@ function inContainer(...args: string[]) {
   return execFileSync('podman', ['exec', CONTAINER, ...args], { encoding: 'utf-8' });
 }
 
-function rpc(request: any, token: string, method: string, params: any = []) {
-  return request
-    .post('/lib/exe/jsonrpc.php', {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      data: { jsonrpc: '2.0', method, params, id: 1 },
-    })
-    .then((r: any) => r.json());
-}
-
-test('MCP exposes the reviewqueue tools alongside the core ones', async ({ request }) => {
-  const res = await request.post('/lib/plugins/mcp/mcp.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'tools/list', params: {}, id: 1 },
-  });
-  const tools = (await res.json()).result.tools as any[];
+test('MCP exposes the reviewqueue tools and nothing outside the allowlist', async ({
+  request,
+}) => {
+  const tools = await mcpToolsList(request, tokens.kail);
   const names = tools.map((t) => t.name);
 
   expect(names).toContain('plugin_reviewqueue_getPageToEdit');
   expect(names).toContain('plugin_reviewqueue_listMyPending');
   expect(names).toContain('plugin_reviewqueue_getStatus');
   expect(names).toContain('plugin_reviewqueue_getPendingText');
-  expect(names).toContain('core_savePage');
+  expect(names).toContain('plugin_reviewqueue_createPage');
+
+  // ADR-0007: superseded by createPage and the range writes, so off the list.
+  expect(names).not.toContain('core_savePage');
+  expect(names).not.toContain('core_appendPage');
 
   // The descriptions are what steer an agent, so they must not be the
   // garbled docblock fragments DokuWiki's parser produces from multi-line
@@ -50,21 +40,17 @@ test('MCP exposes the reviewqueue tools alongside the core ones', async ({ reque
 });
 
 test('martin editing through MCP is published immediately', async ({ request }) => {
+  // The endpoint's allowlist is a property of the endpoint, not of the caller,
+  // so martin uses the same createPage tool - but he is not review-scoped, so
+  // writeEffectiveText() reports it live instead of queued.
   const pageId = `mcpmartin${Date.now()}`;
-  const res = await request.post('/lib/plugins/mcp/mcp.php', {
-    headers: { Authorization: `Bearer ${tokens.martin}`, 'Content-Type': 'application/json' },
-    data: {
-      jsonrpc: '2.0',
-      method: 'tools/call',
-      params: {
-        name: 'core_savePage',
-        arguments: { page: pageId, text: 'martin via mcp', summary: 'mcp' },
-      },
-      id: 1,
-    },
+  const res = await mcpCall(request, tokens.martin, 'plugin.reviewqueue.createPage', {
+    page: pageId,
+    text: 'martin via mcp',
+    summary: 'mcp',
   });
-  const body = await res.json();
-  expect(body.result.isError).toBeFalsy();
+  expect(res.error).toBeFalsy();
+  expect(res.result.status).toBe('live');
 
   const live = await request.get(`/doku.php?id=${pageId}`);
   expect(await live.text()).toContain('martin via mcp');
@@ -82,14 +68,17 @@ test('with review_users cleared, kail writes directly like anyone else', async (
     inContainer('sh', '-c', `echo "\\$conf['plugin']['reviewqueue']['review_users'] = '';" >> ${conf}`);
     expect(inContainer('tail', '-1', conf)).toContain("['review_users'] = ''");
 
+    // The endpoint's tool allowlist is a property of the endpoint, not of the
+    // caller, so kail still writes through createPage - but with the scope
+    // cleared the save is no longer held back, so it reports "live".
     const pageId = `noscope${Date.now()}`;
-    const res = await rpc(request, tokens.kail, 'core.savePage', {
+    const res = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
       page: pageId,
       text: 'kail writes directly now',
       summary: 'unscoped',
     });
     expect(res.error).toBeUndefined();
-    expect(res.result).toBe(true);
+    expect(res.result.status).toBe('live');
 
     const live = await request.get(`/doku.php?id=${pageId}`);
     expect(await live.text()).toContain('kail writes directly now');
@@ -98,12 +87,12 @@ test('with review_users cleared, kail writes directly like anyone else', async (
   }
 
   // ...and review is back on afterwards.
-  const back = await rpc(request, tokens.kail, 'core.savePage', {
+  const back = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
     page: `rescope${Date.now()}`,
     text: 'queued again',
     summary: 's',
   });
-  expect(back.error.message).toMatch(/submitted for review/);
+  expect(back.result.status).toBe('queued');
 });
 
 test('fail-closed: an unwritable queue rejects the save instead of publishing it', async ({
@@ -115,9 +104,10 @@ test('fail-closed: an unwritable queue rejects the save instead of publishing it
   const queueDir = '/var/www/html/data/reviewqueue';
 
   inContainer('mkdir', '-p', `${queueDir}/queue`);
+  inContainer('chown', '-R', 'www-data:www-data', queueDir);
   inContainer('chmod', '0500', `${queueDir}/queue`);
   try {
-    const res = await rpc(request, tokens.kail, 'core.savePage', {
+    const res = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
       page: pageId,
       text: 'must not be published',
       summary: 'fail-closed',
@@ -130,16 +120,19 @@ test('fail-closed: an unwritable queue rejects the save instead of publishing it
     const live = await request.get(`/doku.php?id=${pageId}`);
     expect(await live.text()).not.toContain('must not be published');
   } finally {
+    // Restore ownership too, not just the mode: a directory this test had to
+    // create runs as root and would stay unwritable for every later spec.
     inContainer('chmod', '0755', `${queueDir}/queue`);
+    inContainer('chown', '-R', 'www-data:www-data', queueDir);
   }
 
   // The queue works again once the directory is writable.
-  const after = await rpc(request, tokens.kail, 'core.savePage', {
+  const after = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
     page: `recovered${Date.now()}`,
     text: 'queued normally',
     summary: 's',
   });
-  expect(after.error.message).toMatch(/submitted for review/);
+  expect(after.result.status).toBe('queued');
 });
 
 test('fail-closed: an unwritable pending change survives a failed updateContent()', async ({
@@ -152,12 +145,12 @@ test('fail-closed: an unwritable pending change survives a failed updateContent(
   const pageId = `failupdate${Date.now()}`;
   const queueDir = '/var/www/html/data/reviewqueue/queue';
 
-  const queued = await rpc(request, tokens.kail, 'core.savePage', {
+  const queued = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
     page: pageId,
     text: 'original content',
     summary: 'first',
   });
-  const rqid = Number(/change #(\d+)/.exec(queued.error.message)![1]);
+  const rqid = queued.result.pendingId as number;
 
   // Read-only on the file itself (not just the directory): updateContent()
   // rewrites an *existing* file, which only needs directory write

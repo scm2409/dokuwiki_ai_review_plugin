@@ -49,11 +49,17 @@ class helper_plugin_reviewqueue_capability extends Plugin
         'lib/exe/fetch.php',
         'lib/exe/detail.php',
         'lib/exe/mediamanager.php',
-        // static assets, no wiki content of any kind
+        // Static assets and service metadata, no wiki content of any kind.
+        // These five are exactly the entry scripts that define NOSESSION, so
+        // auth_setup() never runs for them and there is no authenticated user
+        // to confine in the first place - listing them is bookkeeping, not a
+        // decision. Every content-bearing script does authenticate, which is
+        // what makes the gate below complete.
         'lib/exe/css.php',
         'lib/exe/js.php',
         'lib/exe/jquery.php',
         'lib/exe/manifest.php',
+        'lib/exe/opensearch.php',
     ];
 
     /**
@@ -145,6 +151,12 @@ class helper_plugin_reviewqueue_capability extends Plugin
         'plugin.reviewqueue.getLines',
         'plugin.reviewqueue.findInPage',
         'plugin.reviewqueue.searchWithContext',
+        // Creating and deleting: the two writes that cannot address an
+        // existing range, and together the reason core.savePage is not needed
+        // above. Both are deliberate, explicit intents - every range tool
+        // refuses to empty a page precisely so a deletion is never accidental.
+        'plugin.reviewqueue.createPage',
+        'plugin.reviewqueue.deletePage',
         // range-addressed writes (ADR-0005), all queued
         'plugin.reviewqueue.replaceSection',
         'plugin.reviewqueue.insertSection',

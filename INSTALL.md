@@ -104,19 +104,24 @@ unchanged.
 
 Only needed if the agent is to operate the wiki itself.
 
-## 6. Install the MCP plugin
+## 6. Do NOT install the splitbrain MCP plugin
+
+The plugin brings its own MCP endpoint at
+`<dokuwiki>/lib/plugins/reviewqueue/mcp.php`, installed in step 1 along with
+everything else. Nothing further to install.
+
+`splitbrain/dokuwiki-plugin-mcp` must **not** be installed alongside it. It
+serves *every* registered remote API method as a tool — page history, user
+management, whatever any other plugin registers — with no way to restrict
+that. Our endpoint exists precisely to serve a small allowlist instead
+([ADR-0007](docs/design/adr-0007-agent-confinement.md)); with both installed
+the agent can simply use the unrestricted one and the restriction is
+decorative.
+
+If you installed it earlier, remove it:
 
 ```bash
-cd <dokuwiki>/lib/plugins
-git clone https://github.com/splitbrain/dokuwiki-plugin-mcp.git mcp
-chown -R www-data:www-data mcp
-```
-
-For reproducible installations, pin to a commit (this project's test
-environment uses `c44faefa170c63435ccd19c3a25e84e2e2a24c53`):
-
-```bash
-git -C mcp checkout c44faefa170c63435ccd19c3a25e84e2e2a24c53
+rm -rf <dokuwiki>/lib/plugins/mcp
 ```
 
 ## 7. Enable the Remote API
@@ -136,11 +141,23 @@ bottom is an API token as a long `eyJ…` string. Copy it.
 
 The token is a password equivalent for this account. It can be regenerated
 via the button in the profile, which immediately invalidates the old one.
+DokuWiki's tokens carry no `exp` claim (`inc/JWT.php`), so they do not expire
+on their own — regenerating is how you revoke one.
+
+Note that `?do=profile` is not available to a review-scoped account itself
+(ADR-0007: the agent must not be able to change its own credentials). Fetch
+the agent's token while logged in as an administrator, or generate it before
+adding the account to `review_users`.
+
+**Recommended:** give the agent account a long random password it is never
+told, and hand it only the token. The browser routes are confined for it
+anyway, but an account that cannot log in interactively cannot be driven
+through the browser at all.
 
 ## 9. Configure the MCP client
 
-The endpoint is `https://<your-wiki>/lib/plugins/mcp/mcp.php` over HTTP
-transport, authenticated via header:
+The endpoint is `https://<your-wiki>/lib/plugins/reviewqueue/mcp.php` over
+HTTP transport, authenticated via header:
 
 ```
 Authorization: Bearer <token>
@@ -149,7 +166,7 @@ Authorization: Bearer <token>
 For Claude Code, for example:
 
 ```bash
-claude mcp add --transport http dokuwiki https://<your-wiki>/lib/plugins/mcp/mcp.php --header "Authorization: Bearer <token>"
+claude mcp add --transport http dokuwiki https://<your-wiki>/lib/plugins/reviewqueue/mcp.php --header "Authorization: Bearer <token>"
 ```
 
 The exact syntax depends on the client — what matters is only the URL, HTTP
@@ -158,7 +175,7 @@ transport, and the Bearer header.
 Quick test without a client:
 
 ```bash
-curl -sS -X POST https://<your-wiki>/lib/plugins/mcp/mcp.php \
+curl -sS -X POST https://<your-wiki>/lib/plugins/reviewqueue/mcp.php \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"initialize","params":{},"id":1}'
 ```
@@ -169,10 +186,9 @@ instead says no token was accepted, either the header or
 
 ## 10. Install the skill for the agent
 
-Without this context, an agent reliably misunderstands the flow: it takes
-the error message on save for a failure, or reads the page back with
-`core.getPage`, doesn't see its draft, and overwrites its own unreviewed work
-on the next save.
+Without this context, an agent reliably misunderstands the flow: it takes a
+queued status for a failure and retries, or hunts for tools that are not on
+the allowlist instead of using `getPageToEdit` and the range tools.
 
 ```bash
 cp -r skills/dokuwiki-reviewqueue ~/.claude/skills/

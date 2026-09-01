@@ -102,10 +102,17 @@ Deny by default. A review-scoped account may reach only:
 | `lib/exe/css.php`, `js.php`, `jquery.php`, `manifest.php` | static assets |
 | `lib/plugins/reviewqueue/mcp.php` | our own MCP endpoint |
 
+Also allowed: `lib/exe/opensearch.php`. It, and the four static-asset scripts
+above, are exactly the entry scripts that define `NOSESSION`, so `auth_setup()`
+never runs and there is no authenticated user for the gate to confine. That is
+a limit worth stating plainly: **confinement can only apply where DokuWiki
+authenticated someone.** It costs nothing here, because those five scripts are
+also the only ones carrying no wiki content - every content-bearing script
+authenticates, which is what makes the gate complete rather than merely broad.
+
 Refused: `lib/exe/jsonrpc.php`, `lib/exe/xmlrpc.php` (the whole remote API),
 `feed.php` (recent changes), `lib/exe/openapi.php` (API surface disclosure),
-`lib/exe/opensearch.php`, `lib/exe/indexer.php`, `lib/exe/taskrunner.php`,
-`install.php`.
+`lib/exe/indexer.php`, `lib/exe/taskrunner.php`, `install.php`.
 
 A script added by a future DokuWiki release is refused rather than silently
 reachable - the same fail-closed direction as the existing act allowlist.
@@ -149,7 +156,33 @@ It advertises only allowlisted tools **and refuses a non-allowlisted
 `core.savePage` and `core.appendPage` are not on the list: the phase 10 range
 write tools replace them, and they call `ApiCore::savePage()` *internally*
 (`remote.php::writeEffectiveText()`), not through `Api::call()`, so removing
-them from the remote surface does not affect them.
+them from the remote surface does not affect them. `core.getPage` goes too -
+`getPageToEdit` supersedes it and is the call ADR-0004 already requires.
+
+### 5a. Two writes the range tools cannot express
+
+Dropping `core.savePage` left two real gaps, both found while rewriting the
+tests against the new surface, and both closed with a dedicated tool rather
+than by putting `savePage` back:
+
+- **`createPage($page, $text, $summary)`.** Every range tool addresses a range
+  of something that already exists - there is no section, no line range and no
+  `expect` hash for a page that is not there, which is why they refuse one.
+  Letting them create instead would turn a typo in a page id into a silently
+  created orphan page rather than an error, so creating stays an explicit
+  intent. Unlike `savePage`, it refuses when the page already exists, and
+  refuses when the caller already has an open draft for it (ADR-0004's
+  anti-stacking rule, enforced instead of merely warned about).
+- **`deletePage($page, $summary)`.** A deletion is an empty save, and every
+  write tool refuses to empty a page precisely so that a deletion is never the
+  by-product of replacing a range with nothing. `writeEffectiveText()` gained
+  an `$allowEmpty` flag used by this one caller.
+
+A consequence worth recording: over the remote surface a confined account can
+no longer stack two pending changes on one page at all - `createPage` refuses
+and a range write continues the open draft in place. Stacking remains reachable
+only through the browser edit form, which is what a *human* under review uses,
+so ADR-0004's warnings still matter and are now tested there.
 
 The `splitbrain/dokuwiki-plugin-mcp` plugin must be **uninstalled**. While it is
 installed it serves the full 53-tool surface at its own URL, and gate 1 would
@@ -211,3 +244,13 @@ own the generator, `ToolSchema` enforces the invariant and falls back to
 - Enforcement is PHP-level: it runs inside DokuWiki, after `init.php`. A
   web-server rule would block earlier still, but is outside a plugin's reach
   and is left as optional operator hardening, documented in `usage.md`.
+- Confinement applies only where a user was authenticated (see the `NOSESSION`
+  note above). An unauthenticated request is governed by the wiki's ACLs like
+  any anonymous visitor's - the agent gains nothing from it that it could not
+  get by sending no token at all.
+- Found and fixed while testing this phase, in `searchWithContext`: the
+  `SEARCH_MAX_PAGES` cap counted every pending record *examined* rather than
+  every *match*, and `myPending()` is oldest-first, so an author with more than
+  20 open drafts silently stopped finding their newest ones - the exact work
+  ADR-0004 added that tool to surface. `searchMyPending` scans them all and had
+  no such cap, so the two disagreed. The cap now bounds the result set.
