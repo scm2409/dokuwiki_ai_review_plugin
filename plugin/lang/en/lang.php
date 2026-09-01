@@ -43,3 +43,7 @@ $lang['media_overwrite'] = 'This upload would replace a file that already exists
 
 $lang['media_delete'] = 'This change proposes DELETING the file. Approving it removes the file from the wiki.';
 $lang['act_denied']   = 'The action "%s" is not available to your account, because changes made that way cannot go through review.';
+
+$lang['entry_denied']    = 'This part of the wiki (%s) is not available to your account.';
+$lang['revision_denied'] = 'Earlier revisions are not available to your account. Only the current version can be read.';
+$lang['ajax_denied']     = 'The request "%s" is not available to your account.';
