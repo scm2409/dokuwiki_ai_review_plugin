@@ -83,6 +83,42 @@ ever touch a queue entry the caller already authored and that has not been revie
 (`checkOwnChangeAccess()`), so they can never publish anything - `lockdown.api.spec.ts`
 lists them separately as `own-queue`.
 
+## Phase 11 addendum: the read path is now governed too
+
+This audit covers writes. [ADR-0007](adr-0007-agent-confinement.md) added the
+matching treatment for reads and for the transports themselves: a review-scoped
+account is confined by an allowlist at three gates (entry script, `do=` action,
+MCP tool), so the "not covered" note above is narrower than it was.
+
+In particular, **"remote API methods from third-party plugins" is now closed** for
+such an account: `lib/exe/jsonrpc.php` and `lib/exe/xmlrpc.php` are refused
+outright, and our own endpoint serves only allowlisted methods, so a writing
+`RemotePlugin` method installed later is unreachable rather than merely
+undetected. `lockdown.api.spec.ts` still enumerates the whole surface — now from
+core's own OpenAPI spec rather than a tool list — and asserts each method is
+either audited or refused by name.
+
+`core.savePage`/`appendPage` are no longer reachable either; `createPage`,
+`deletePage` and the range writes replace them and all end in the same
+`ApiCore::savePage()` call, so every row of the table above still holds.
+
+**One write path this audit had missed**, found by `/code-review` during phase 11
+and reproduced live: core's `media_metasave()` — the media manager's *Edit* tab,
+`mediado=save` on `lib/exe/mediamanager.php` or `doku.php?do=media` — writes IPTC
+fields into the live media file, pushes an attic revision and appends a changelog
+entry while firing **neither** `MEDIA_UPLOAD_FINISH` **nor** `MEDIA_DELETE_FILE`.
+`action/media.php` hooks only those two, so a review-scoped account could publish
+an unreviewed change to a live file. It was reachable for the whole of phases
+7-10. Closed in phase 11 by refusing the media manager outright
+([ADR-0007](adr-0007-agent-confinement.md) §4a) rather than by adding a third
+media hook: the manager also leaks media history, and an entry-script refusal
+covers both without chasing individual `mediado=` values.
+
+The lesson for the table above is that "every write path" was scoped to page and
+media *content* events; a core function that edits a file's embedded metadata
+fires neither. If a future release adds another such function, the entry-script
+allowlist is what contains it.
+
 Additional operational safeguards, see [`../usage.md`](../usage.md):
 
 - keep the ACL for the review-required account as tight as possible (no `AUTH_DELETE`

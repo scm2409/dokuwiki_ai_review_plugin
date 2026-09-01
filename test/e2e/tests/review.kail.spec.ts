@@ -1,10 +1,7 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { saveAsMartin } from './_helpers';
 
 // Covers strategy.md scenario 1 (create) and 2 (edit) via the browser path.
 // Each test uses its own fresh page id rather than the shared
@@ -37,16 +34,7 @@ test('editing an existing page as kail is queued, live content unchanged', async
 
   // Fixture setup via martin's token, independent of this project's kail
   // browser session, so the page exists and is live before kail touches it.
-  const setup = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.martin}`, 'Content-Type': 'application/json' },
-    data: {
-      jsonrpc: '2.0',
-      method: 'core.savePage',
-      params: { page: pageId, text: original, summary: 'fixture setup' },
-      id: 1,
-    },
-  });
-  expect((await setup.json()).result).toBe(true);
+  await saveAsMartin(request, pageId, original);
 
   await page.goto(`/doku.php?id=${pageId}&do=edit`);
   const editor = page.locator('#wiki__text');

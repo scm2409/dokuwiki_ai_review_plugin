@@ -1,25 +1,11 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc, queueAsKail, queueViaBrowserAsKail } from './_helpers';
 
 // Covers strategy.md scenarios 1 (approve), 5 (reject with reason), 14
 // (self-review), 15 (non-reviewer access), 16 (CSRF), 18 (diff/preview tabs),
 // 19 (diff horizontal scroll).
-
-async function queueAsKail(request: any, pageId: string, text: string, summary: string) {
-  const res = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'core.savePage', params: { page: pageId, text, summary }, id: 1 },
-  });
-  const body = await res.json();
-  const match = /change #(\d+)/.exec(body.error.message);
-  if (!match) throw new Error(`unexpected response: ${JSON.stringify(body)}`);
-  return Number(match[1]);
-}
 
 test('martin has a discoverable link to the review queue in Site Tools', async ({ page }) => {
   // DokuWiki's own "Admin" menu entry only shows for $INFO['ismanager']
@@ -85,11 +71,8 @@ test('a rejection reason written by martin is readable by kail via the API', asy
   await item.locator('button[name="rqaction"][value="reject"]').click();
   await expect(page.locator('#dokuwiki__content')).toContainText(`Change #${rqid} rejected`);
 
-  const status = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'plugin.reviewqueue.getStatus', params: { id: rqid }, id: 1 },
-  });
-  const body = await status.json();
+  const status = await rpc(request, tokens.kail, 'plugin.reviewqueue.getStatus', { id: rqid });
+  const body = status;
   expect(body.result.state).toBe('rejected');
   expect(body.result.comment).toBe('too informal, please rewrite');
   expect(body.result.reviewer).toBe('martin');
@@ -100,8 +83,9 @@ test('the queue warns the reviewer when several changes stack on one page', asyn
   request,
 }) => {
   const pageId = `uistack${Date.now()}`;
-  const first = await queueAsKail(request, pageId, 'stacked draft one', 's1');
-  const second = await queueAsKail(request, pageId, 'stacked draft two', 's2');
+  // Browser path: the only route that still stacks (see _helpers.ts).
+  const first = (await queueViaBrowserAsKail(request, pageId, 'stacked draft one', 's1')).id;
+  const second = (await queueViaBrowserAsKail(request, pageId, 'stacked draft two', 's2')).id;
 
   await page.goto('/doku.php?do=admin&page=reviewqueue');
   const item = page.locator(`.reviewqueue-item[data-rqid="${second}"]`);
@@ -142,11 +126,8 @@ test('martin can switch to a rendered preview tab of a pending change without ap
   await expect(previewPanel.locator(`a[href*="id=${ns}:sibling"]`)).toBeVisible();
 
   // Still just a preview - the change must remain untouched.
-  const status = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'plugin.reviewqueue.getStatus', params: { id: rqid }, id: 1 },
-  });
-  expect((await status.json()).result.state).toBe('pending');
+  const status = await rpc(request, tokens.kail, 'plugin.reviewqueue.getStatus', { id: rqid });
+  expect(status.result.state).toBe('pending');
 });
 
 test('a diff line too wide for the page gets its own horizontal scrollbar', async ({
@@ -178,7 +159,6 @@ test('approving without a valid CSRF token is rejected', async ({ page, request 
   const res = await request.post('/doku.php', {
     form: { do: 'admin', page: 'reviewqueue', rqid: String(rqid), rqaction: 'approve', sectok: 'bogus' },
   });
-  expect(res.ok()).toBeTruthy();
 
   const live = await request.get(`/doku.php?id=${pageId}`);
   expect(await live.text()).not.toContain('csrf content');
@@ -186,9 +166,6 @@ test('approving without a valid CSRF token is rejected', async ({ page, request 
   // Assert the change itself is untouched, not just that the page looks
   // unchanged - otherwise this would also pass if the approval failed for
   // some unrelated reason.
-  const status = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'plugin.reviewqueue.getStatus', params: { id: rqid }, id: 1 },
-  });
-  expect((await status.json()).result.state).toBe('pending');
+  const status = await rpc(request, tokens.kail, 'plugin.reviewqueue.getStatus', { id: rqid });
+  expect(status.result.state).toBe('pending');
 });

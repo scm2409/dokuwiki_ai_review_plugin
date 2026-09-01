@@ -56,24 +56,6 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         $controller->register_hook('COMMON_WIKIPAGE_SAVE', 'BEFORE', $this, 'handleWikipageSave');
     }
 
-    /**
-     * Actions a review-scoped user may perform. Everything not listed is
-     * refused for them - see handleActPreprocess().
-     *
-     * @var string[]
-     */
-    protected const ALLOWED_ACTS = [
-        // reading and navigating
-        'show', 'search', 'recent', 'index', 'revisions', 'diff', 'backlink',
-        'media', 'mediadetail', 'sitemap', 'subscribe', 'redirect', 'resendpwd',
-        'login', 'logout', 'profile', 'check', 'denied', 'draftdel', 'locked',
-        // editing, which is what the queue exists to intercept
-        'edit', 'preview', 'save', 'cancel', 'conflict', 'draft',
-        // our own review actions (a reviewer is normally not review-scoped,
-        // but the two lists can overlap in principle)
-        'admin',
-    ];
-
     /** @param Event $event */
     public function handleActPreprocess(Event $event, $param)
     {
@@ -96,7 +78,13 @@ class action_plugin_reviewqueue_save extends ActionPlugin
         // near COMMON_WIKIPAGE_SAVE, so there is nothing for the queue to
         // intercept. An allowlist means a plugin installed later is refused
         // rather than silently unreviewed - the safe direction to fail.
-        if (in_array($act, self::ALLOWED_ACTS, true)) return;
+        //
+        // The list itself lives in helper/capability.php, because the same
+        // account is confined at two other doors as well (entry script and MCP
+        // tool) and those rules belong together - see ADR-0007.
+        /** @var helper_plugin_reviewqueue_capability $cap */
+        $cap = $this->loadHelper('reviewqueue_capability');
+        if ($cap->mayUseAct($act)) return;
 
         msg(sprintf($this->getLang('act_denied'), hsc((string) $act)), -1);
         $event->data = 'show';

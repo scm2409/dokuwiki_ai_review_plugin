@@ -43,3 +43,7 @@ $lang['media_overwrite'] = 'Dieser Upload würde eine bereits vorhandene Datei e
 
 $lang['media_delete'] = 'Diese Änderung schlägt vor, die Datei zu LÖSCHEN. Eine Freigabe entfernt sie aus dem Wiki.';
 $lang['act_denied']   = 'Die Aktion „%s" steht Ihrem Konto nicht zur Verfügung, weil so vorgenommene Änderungen kein Review durchlaufen können.';
+
+$lang['entry_denied']    = 'Dieser Teil des Wikis (%s) steht Ihrem Konto nicht zur Verfügung.';
+$lang['revision_denied'] = 'Ältere Versionen stehen Ihrem Konto nicht zur Verfügung. Es kann nur die aktuelle Fassung gelesen werden.';
+$lang['ajax_denied']     = 'Die Anfrage „%s" steht Ihrem Konto nicht zur Verfügung.';

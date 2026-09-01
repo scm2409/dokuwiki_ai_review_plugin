@@ -1,29 +1,19 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc, queueAsKail, queueViaBrowserAsKail } from './_helpers';
 
 // Covers ADR-0004: a queued change is invisible in the read path, so the
 // author needs explicit tools and warnings to avoid clobbering their own
 // still-unreviewed work.
 
-function rpc(request: any, token: string, method: string, params: any = []) {
-  return request
-    .post('/lib/exe/jsonrpc.php', {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      data: { jsonrpc: '2.0', method, params, id: 1 },
-    })
-    .then((r: any) => r.json());
-}
-
 async function queue(request: any, page: string, text: string, summary = 's') {
-  const body = await rpc(request, tokens.kail, 'core.savePage', { page, text, summary });
-  const match = /change #(\d+)/.exec(body.error.message);
-  if (!match) throw new Error(`expected a queue rejection, got ${JSON.stringify(body)}`);
-  return { id: Number(match[1]), message: body.error.message as string };
+  // Whatever the page's current state, end up with one queued change for it -
+  // createPage for a page that does not exist yet, a whole-page range write
+  // otherwise. Both report the outcome as a value; core.savePage's
+  // throw-to-report convention (ADR-0003) is gone from this path.
+  const id = await queueAsKail(request, page, text, summary);
+  return { id, message: '' };
 }
 
 test('a queued change stays out of the read path and the search index', async ({ request }) => {
@@ -36,8 +26,16 @@ test('a queued change stays out of the read path and the search index', async ({
   await queue(request, pageId, 'DRAFT text mentioning pangolins');
 
   // The author reading the page back gets the live text, not their draft.
-  const read = await rpc(request, tokens.kail, 'core.getPage', { page: pageId });
-  expect(read.result).toBe('LIVE text mentioning aardvarks');
+  // core.getPage is off the allowlist since ADR-0007, so this reads the live
+  // source explicitly through the range tools instead.
+  const read = await rpc(request, tokens.kail, 'plugin.reviewqueue.getLines', {
+    page: pageId,
+    from: 1,
+    count: 0,
+    source: 'live',
+  });
+  expect(read.result.text).toBe('LIVE text mentioning aardvarks');
+  expect(read.result.source).toBe('live');
 
   // The draft is not findable by search, for the author either.
   const draftHits = await rpc(request, tokens.kail, 'core.searchPages', { query: 'pangolins' });
@@ -87,13 +85,17 @@ test('stacking a second change on the same page warns the author by change id', 
     summary: 'setup',
   });
 
-  const first = await queue(request, pageId, 'draft one');
-  expect(first.message).not.toMatch(/already have unreviewed/);
+  // Stacking is only reachable through the browser now: over the API a second
+  // createPage is refused and a range write continues the first draft in place
+  // (ADR-0006). The warning still matters for a human placed under review.
+  const first = await queueViaBrowserAsKail(request, pageId, 'draft one');
+  expect(first.body).not.toMatch(/already have unreviewed/);
 
-  const second = await queue(request, pageId, 'draft two');
-  expect(second.message).toMatch(/already have unreviewed change\(s\) #\d+/);
-  expect(second.message).toContain(`#${first.id}`);
-  expect(second.message).toMatch(/overwritten/);
+  // The author is warned, by change id, that the earlier work would be lost.
+  const second = await queueViaBrowserAsKail(request, pageId, 'draft two');
+  expect(second.body).toMatch(/already have unreviewed change\(s\)/);
+  expect(second.body).toContain(`#${first.id}`);
+  expect(second.body).toMatch(/overwritten/);
 
   // getPageToEdit surfaces the stack too, and hands back the newest draft.
   const res = await rpc(request, tokens.kail, 'plugin.reviewqueue.getPageToEdit', { page: pageId });

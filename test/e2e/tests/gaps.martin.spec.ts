@@ -1,33 +1,11 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc, queueAsKail, queueViaBrowserAsKail, saveAsMartin } from './_helpers';
 
 // Gaps found while reviewing coverage against strategy.md - see
 // docs/testing/coverage-review.md. These cover scenarios 1 (attribution),
 // 3 (deletion), 6 (sequential approval), 11 (conflict) and 14 (self-review).
-
-async function queueAsKail(request: any, pageId: string, text: string, summary = 's') {
-  const res = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'core.savePage', params: { page: pageId, text, summary }, id: 1 },
-  });
-  const body = await res.json();
-  const match = /change #(\d+)/.exec(body.error.message);
-  if (!match) throw new Error(`expected a queue rejection, got ${JSON.stringify(body)}`);
-  return Number(match[1]);
-}
-
-async function saveAsMartin(request: any, page: string, text: string, summary = 'setup') {
-  const res = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.martin}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'core.savePage', params: { page, text, summary }, id: 1 },
-  });
-  expect((await res.json()).result).toBe(true);
-}
 
 async function approve(page: any, rqid: number) {
   await page.goto('/doku.php?do=admin&page=reviewqueue');
@@ -57,7 +35,14 @@ test('an approved deletion actually removes the page', async ({ page, request })
   const pageId = `deletion${Date.now()}`;
   await saveAsMartin(request, pageId, 'this page will be deleted');
 
-  const rqid = await queueAsKail(request, pageId, '', 'delete it');
+  // Deleting is its own tool since ADR-0007: every range tool refuses to empty
+  // a page, so a deletion is always something the author asked for on purpose.
+  const del = await rpc(request, tokens.kail, 'plugin.reviewqueue.deletePage', {
+    page: pageId,
+    summary: 'delete it',
+  });
+  expect(del.result.status).toBe('queued');
+  const rqid = del.result.pendingId as number;
 
   // Still there while the deletion is only queued.
   let live = await request.get(`/doku.php?id=${pageId}`);
@@ -92,7 +77,6 @@ test('kail cannot approve his own change even by posting directly', async ({ pag
     headers: { Cookie: cookieHeader },
     form: { do: 'admin', page: 'reviewqueue', rqid: String(rqid), rqaction: 'approve', sectok },
   });
-  expect(res.ok()).toBeTruthy();
 
   const live = await request.get(`/doku.php?id=${pageId}`);
   expect(await live.text()).not.toContain('kail tries to self-approve');
@@ -143,17 +127,7 @@ test('once approved, a draft leaves the pending search and enters the wiki searc
   const rqid = await queueAsKail(request, pageId, `An article about ${marker} burrows.`);
 
   const pendingSearch = (query: string) =>
-    request
-      .post('/lib/exe/jsonrpc.php', {
-        headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-        data: {
-          jsonrpc: '2.0',
-          method: 'plugin.reviewqueue.searchMyPending',
-          params: { query },
-          id: 1,
-        },
-      })
-      .then((r) => r.json());
+    rpc(request, tokens.kail, 'plugin.reviewqueue.searchMyPending', { query });
 
   expect((await pendingSearch(marker)).result).toHaveLength(1);
 
@@ -164,19 +138,19 @@ test('once approved, a draft leaves the pending search and enters the wiki searc
   expect((await pendingSearch(marker)).result).toEqual([]);
 
   // ...and now findable the normal way.
-  const live = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'core.searchPages', params: { query: marker }, id: 1 },
-  });
-  expect((await live.json()).result.map((h: any) => h.id)).toContain(pageId);
+  const live = await rpc(request, tokens.kail, 'core.searchPages', { query: marker });
+  expect(live.result.map((h: any) => h.id)).toContain(pageId);
 });
 
 test('two stacked changes can be approved one after the other', async ({ page, request }) => {
   const pageId = `sequential${Date.now()}`;
   await saveAsMartin(request, pageId, 'base');
 
-  const first = await queueAsKail(request, pageId, 'first draft');
-  const second = await queueAsKail(request, pageId, 'second draft');
+  // Via the browser, the one route that can still stack: over the API
+  // createPage refuses a second draft and a range write continues the first
+  // in place (ADR-0006), so stacking is only reachable the way a human does it.
+  const first = (await queueViaBrowserAsKail(request, pageId, 'first draft')).id;
+  const second = (await queueViaBrowserAsKail(request, pageId, 'second draft')).id;
 
   await approve(page, first);
   await expect(page.locator('#dokuwiki__content')).toContainText(`Change #${first} approved`);

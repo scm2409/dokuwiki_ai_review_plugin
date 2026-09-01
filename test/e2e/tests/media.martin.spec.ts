@@ -2,10 +2,7 @@ import { test, expect } from '@playwright/test';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc } from './_helpers';
 
 // strategy.md scenarios 4 (kail's upload is queued, published on approval)
 // and 8 (martin's upload is unaffected).
@@ -16,15 +13,6 @@ const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
   'base64'
 );
-
-function rpc(request: any, token: string, method: string, params: any = []) {
-  return request
-    .post('/lib/exe/jsonrpc.php', {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      data: { jsonrpc: '2.0', method, params, id: 1 },
-    })
-    .then((r: any) => r.json());
-}
 
 test('kail upload is queued, not published, and survives approval byte-for-byte', async ({
   page,

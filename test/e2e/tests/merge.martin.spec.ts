@@ -1,10 +1,7 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc, queueAsKail, saveAsMartin } from './_helpers';
 
 // strategy.md scenarios 10 (auto-merge of disjoint edits) and 11 (real
 // conflict -> manual resolution).
@@ -18,25 +15,6 @@ Original A content.
 ==== Section B ====
 
 Original B content.${marker}`;
-
-async function queueAsKail(request: any, pageId: string, text: string, summary = 's') {
-  const res = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'core.savePage', params: { page: pageId, text, summary }, id: 1 },
-  });
-  const body = await res.json();
-  const match = /change #(\d+)/.exec(body.error.message);
-  if (!match) throw new Error(`expected a queue rejection, got ${JSON.stringify(body)}`);
-  return Number(match[1]);
-}
-
-async function saveAsMartin(request: any, page: string, text: string, summary = 'setup') {
-  const res = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.martin}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'core.savePage', params: { page, text, summary }, id: 1 },
-  });
-  expect((await res.json()).result).toBe(true);
-}
 
 test('disjoint edits are merged automatically on approval', async ({ page, request }) => {
   const pageId = `merge${Date.now()}`;
@@ -58,11 +36,8 @@ test('disjoint edits are merged automatically on approval', async ({ page, reque
   await expect(page.locator('#dokuwiki__content')).toContainText(`Change #${rqid} approved`);
 
   // Both edits must survive.
-  const live = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.martin}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'core.getPage', params: { page: pageId }, id: 1 },
-  });
-  const text = (await live.json()).result as string;
+  const live = await rpc(request, tokens.martin, 'core.getPage', { page: pageId });
+  const text = live.result as string;
   expect(text).toContain('Rewritten A content by kail.');
   expect(text).toContain('Rewritten B content by martin.');
   expect(text).not.toContain('<<<<<<<');
@@ -109,18 +84,12 @@ test('overlapping edits conflict and are resolved by hand', async ({ page, reque
   await stillConflicted.locator('button[value="resolve"]').click();
   await expect(page.locator('#dokuwiki__content')).toContainText(`Change #${rqid} resolved`);
 
-  const live = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.martin}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'core.getPage', params: { page: pageId }, id: 1 },
-  });
-  const text = (await live.json()).result as string;
+  const live = await rpc(request, tokens.martin, 'core.getPage', { page: pageId });
+  const text = live.result as string;
   expect(text).toContain('agreed version of A.');
   expect(text).not.toContain('<<<<<<<');
 
   // The change is closed and attributed to kail.
-  const status = await request.post('/lib/exe/jsonrpc.php', {
-    headers: { Authorization: `Bearer ${tokens.kail}`, 'Content-Type': 'application/json' },
-    data: { jsonrpc: '2.0', method: 'plugin.reviewqueue.getStatus', params: { id: rqid }, id: 1 },
-  });
-  expect((await status.json()).result.state).toBe('approved');
+  const status = await rpc(request, tokens.kail, 'plugin.reviewqueue.getStatus', { id: rqid });
+  expect(status.result.state).toBe('approved');
 });

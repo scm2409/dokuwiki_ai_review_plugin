@@ -36,9 +36,16 @@ read tools accept an optional `expect`/context handling that lets a write
 tool refuse a stale write; read a section right before writing it if you are
 not sure it is still current.
 
-`core.getPage`/`core.savePage` still exist for genuinely whole-page work (a
-full rewrite, or creating a brand-new page - the range tools only work on a
-page or draft that already exists). But default to the tools above.
+Two writes cannot address a range of anything, so they are their own tools:
+
+- **`createPage(page, text, summary)`** — bring a new page into being. Refused
+  if the page already exists, or if you already have an open draft creating it.
+- **`deletePage(page, summary)`** — propose removing a page. Every other write
+  tool refuses to leave a page empty, so a deletion is always deliberate.
+
+`core.savePage`, `core.appendPage` and `core.getPage` are **not available** to
+a review-scoped account (ADR-0007): `getPageToEdit` and the range tools replace
+them, and the two above cover creating and deleting.
 
 ## What `status` means on every write tool
 
@@ -56,28 +63,23 @@ field - use it, don't guess from side effects:
 
 ## Never stack changes on one page - the range tools already handle this
 
-If you save the same page twice with `core.savePage` before the first is
-reviewed, both drafts are based on the published revision, not on each
-other, and whichever the reviewer approves last wins. The range write tools
-avoid this automatically: they read your own open draft as their starting
-point and continue it in place (`status: "updated"`), so returning to refine
-a page you are already working on does not create a second, competing
-entry. **Prefer the range tools over `core.savePage` for exactly this
-reason** whenever you are touching a page you already have an open change
-on.
+Two drafts for one page, each based on the published revision rather than on
+each other, mean whichever the reviewer approves last silently wins. Over the
+tools you have, this can no longer happen by accident:
 
-`core.savePage`/`core.appendPage` do **not** get this treatment - they still
-stack a second entry and only warn about it (the error message names the
-earlier change(s) by number: "you already have unreviewed change(s) #41 on
-this page"). If you see that warning, you used the wrong tool: switch to
-`getPageToEdit` for the full text and the range tools (or
-`updatePendingChange` for a full rewrite) to continue it instead of leaving
-two competing drafts for the reviewer to sort out.
+- the range write tools read your own open draft as their starting point and
+  continue it in place (`status: "updated"`), so refining a page you are
+  already working on never creates a second entry;
+- `createPage` refuses outright when a draft for that page is already open, and
+  tells you which change to continue.
+
+If you get that refusal, you used the wrong tool: read the draft with
+`getPageToEdit` and continue it with a range write (or `updatePendingChange`
+for a full rewrite).
 
 ## The one rule for full-page work
 
-Before reading or editing a **whole** page, call **`getPageToEdit`**, never
-`core.getPage`.
+Before reading or editing a **whole** page, call **`getPageToEdit`**.
 
 | Transport | Tool name |
 |---|---|
@@ -95,10 +97,10 @@ It returns the text you should actually edit:
   *your* draft. Edit this, not the live text.
 - `warning` — non-empty means read it and act on it.
 
-`core.getPage` always returns the **live** text. If you use it while you have a
-pending change, your next full-page save reverts your own unreviewed work back
-to the published version. The range read tools do not have this trap - they
-default to your own draft automatically (`source: "auto"`).
+If you need the published text specifically - to compare against your draft,
+say - the range read tools take `source: "live"`. Left at their default
+(`source: "auto"`) they give you your own draft when you have one, which is
+almost always what you want.
 
 ## Changed your mind about an open change? Withdraw it.
 
@@ -112,14 +114,18 @@ You cannot withdraw a change that is not yours, is already decided, or is
 
 ## What happens when a full-page save is queued
 
-`core.savePage` (and `core.appendPage`) will **return an error** when your change
-is queued. That error is the success path — it is not a failure to retry:
+`createPage`, `deletePage` and the range write tools all report the outcome as
+a value, in the `status` field described above - a `"queued"` or `"updated"`
+status is the success path, not a failure to retry. Do not retry the write, do
+not try to work around it, and **do not tell the user the page was updated.**
+Say it was submitted for review and is awaiting approval.
+
+A media upload (`core.saveMedia`) is the one write that still reports a queued
+change by **returning an error**, because core's method has no other channel:
 
 > Your change to 'start' was submitted for review as change #42. It is NOT live yet.
 
-Take the change id from it. Do not retry the save, do not try to work around it,
-and **do not tell the user the page was updated.** Say it was submitted for
-review and is awaiting approval. The range write tools report the same
+Take the change id from it. The range write tools report the same
 outcome via `status: "queued"`/`"updated"` instead of an error - see above.
 
 ## Searching: use `searchWithContext`, not `core.searchPages`
@@ -170,10 +176,14 @@ tools cannot save you here: they only help once you have picked the page.
 
 - **Search does not see queued changes** unless you use `searchWithContext`
   or `searchMyPending`.
-- **Deleting a page** (saving empty text) is queued like any other change.
-  The page stays visible until a human approves the deletion. None of the
-  range write tools can do this - they refuse a write that would leave the
-  page empty - use `core.savePage` with empty text instead.
+- **Deleting a page** is `deletePage`, and it is queued like any other change.
+  The page stays visible until a human approves the deletion. The range write
+  tools refuse a write that would leave the page empty, on purpose: a deletion
+  should be something you asked for, not the by-product of replacing a range
+  with nothing.
+- **You cannot read page history.** No tool exposes revisions, and the browser
+  routes to them are closed for your account too. If you need to know what a
+  page said before, ask the user.
 - **You cannot approve anything**, including your own changes. Self-approval is
   refused by design. Only a reviewer can publish.
 - **The page history won't show your pending change.** Once approved, it appears

@@ -179,9 +179,20 @@ content) remains unchanged. Tested in test scenarios 17 and 23.
 
 ## MCP visibility
 
-`remote.php` implements `dokuwiki\Extension\RemotePlugin`. Every public method with a
-docblock automatically appears as a `plugin_reviewqueue_<method>` tool in the `mcp`
-plugin (see `docs/research/kaos-hooks.md`, section on the `mcp` plugin —
-`SchemaGenerator` generates this automatically from `Api::getPluginMethods()`). No
-additional integration code needed on our side, just clean docblocks for good tool
-descriptions.
+`remote.php` implements `dokuwiki\Extension\RemotePlugin`, so every public method with a
+docblock is a candidate tool. Since [ADR-0007](adr-0007-agent-confinement.md) the plugin
+serves them itself, from `plugin/mcp.php` via `meta/McpServer.php` and
+`meta/ToolSchema.php` (adapted from `splitbrain/dokuwiki-plugin-mcp`, GPL-2), rather than
+relying on that plugin being installed — which is now a deployment error, because it
+would serve the entire unrestricted API surface alongside ours.
+
+A method appears as a tool only if it is on `helper/capability.php`'s `TOOLS` list, and a
+`tools/call` naming anything else is refused rather than merely hidden. Adding a remote
+method therefore takes two steps now: write it with a clean docblock, and add it to that
+list — deliberately, since the list is also what `lockdown.api.spec.ts` audits.
+
+`ToolSchema` additionally guarantees that no emitted schema has type `array` without
+`items`. Core's `OpenAPIGenerator::typeToSchema()` omits `items` whenever the docblock
+says a bare `array` rather than `foo[]`, and Google's Gemini API rejects the *entire*
+request over one such schema — so a single method with a loose docblock would otherwise
+take the whole tool list down for anyone routing through Gemini.

@@ -1,27 +1,10 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '.auth', 'tokens.json'), 'utf-8')
-) as Record<string, string>;
+import { tokens, rpc, saveAsMartin } from './_helpers';
 
 // Phase 10 (docs/design/adr-0005): read tools that work on part of a page
 // instead of the whole thing. Covers strategy.md scenarios 20-21.
-
-function rpc(request: any, token: string, method: string, params: any = []) {
-  return request
-    .post('/lib/exe/jsonrpc.php', {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      data: { jsonrpc: '2.0', method, params, id: 1 },
-    })
-    .then((r: any) => r.json());
-}
-
-async function saveAsMartin(request: any, page: string, text: string, summary = 'setup') {
-  const res = await rpc(request, tokens.martin, 'core.savePage', { page, text, summary });
-  expect(res.result).toBe(true);
-}
 
 const NESTED = [
   '====== Top ======',
@@ -157,19 +140,24 @@ test('findInPage returns line numbers with surrounding context', async ({ reques
 test('searchWithContext covers both live pages and the caller own pending drafts', async ({
   request,
 }) => {
+  // Unique per run: a fixed marker accumulates a live page on every run, so
+  // the "exactly these two pages" assertions below only held on a fresh
+  // container and drifted as soon as the suite was run twice.
+  const marker = `zzqsearchmarker${Date.now()}`;
+
   const livePageId = `rangesearchlive${Date.now()}`;
-  await saveAsMartin(request, livePageId, `====== Live ======\n\nzzqsearchmarker in the live page.\n`);
+  await saveAsMartin(request, livePageId, `====== Live ======\n\n${marker} in the live page.\n`);
 
   const draftPageId = `rangesearchpending${Date.now()}`;
-  const queued = await rpc(request, tokens.kail, 'core.savePage', {
+  const queued = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
     page: draftPageId,
-    text: `====== Draft ======\n\nzzqsearchmarker in kail's own draft.\n`,
+    text: `====== Draft ======\n\n${marker} in kail's own draft.\n`,
     summary: 's',
   });
-  expect(queued.error.message).toMatch(/submitted for review/);
+  expect(queued.result.status).toBe('queued');
 
   const all = await rpc(request, tokens.kail, 'plugin.reviewqueue.searchWithContext', {
-    query: 'zzqsearchmarker',
+    query: marker,
   });
   const pages = all.result.map((r: any) => r.page).sort();
   expect(pages).toEqual([draftPageId, livePageId].sort());
@@ -179,11 +167,11 @@ test('searchWithContext covers both live pages and the caller own pending drafts
   expect(liveResult.source).toBe('live');
 
   // core.searchPages, by contrast, never sees the pending draft (ADR-0004).
-  const core = await rpc(request, tokens.kail, 'core.searchPages', { query: 'zzqsearchmarker' });
+  const core = await rpc(request, tokens.kail, 'core.searchPages', { query: marker });
   expect(core.result.map((r: any) => r.id)).not.toContain(draftPageId);
 
   const liveOnly = await rpc(request, tokens.kail, 'plugin.reviewqueue.searchWithContext', {
-    query: 'zzqsearchmarker',
+    query: marker,
     scope: 'live',
   });
   expect(liveOnly.result.map((r: any) => r.page)).toEqual([livePageId]);

@@ -14,9 +14,12 @@ remote API, ACL, rendering) and can only really be verified end-to-end.
   official tarball `dokuwiki-2024-02-06b.tgz` (not from a prebuilt
   Docker Hub image — more deterministic, allows clean pre-seeding of `data/`).
   Podman runs rootless in this environment.
-- **Plugins in the image:** our `reviewqueue` (mounted/copied from `plugin/`) and
-  `splitbrain/dokuwiki-plugin-mcp`, pinned to a fixed commit (no `master` tracking
-  in the test setup, so test runs stay reproducible).
+- **Plugins in the image:** only our `reviewqueue` (mounted/copied from `plugin/`).
+  `splitbrain/dokuwiki-plugin-mcp` is deliberately **not** installed since
+  [ADR-0007](../design/adr-0007-agent-confinement.md) — it serves the entire remote
+  API as tools with no way to restrict it, so having it alongside our own endpoint
+  would leave the unrestricted surface reachable and make the confinement tests
+  meaningless. The image therefore mirrors the required production layout.
 - **Seeding (`test/env/seed/`):**
   - `users.auth.php`: `admin` (DokuWiki admin), `martin`/`martin` (group `reviewer`),
     `kail`/`kail` (group — none special, review-required via `review_users=kail`).
@@ -81,12 +84,14 @@ remote API, ACL, rendering) and can only really be verified end-to-end.
 
 ### MCP end-to-end
 
-12. Real MCP handshake (`initialize` → `tools/list` → `tools/call`) against
-    `lib/plugins/mcp/mcp.php` with a bearer token for `kail`. `tools/list` contains
-    `plugin_reviewqueue_listMyPending`, among others; `core_savePage` returns an
-    `isError` result with the review ID in the text.
-13. Same flow with a token for `martin` → `core_savePage` returns success, page is
-    immediately live.
+12. Real MCP handshake (`initialize` → `tools/list` → `tools/call`) against our own
+    `lib/plugins/reviewqueue/mcp.php` with a bearer token for `kail` (the
+    splitbrain `mcp` plugin is no longer installed — ADR-0007). `tools/list`
+    contains `plugin_reviewqueue_listMyPending`, among others, and *not*
+    `core_savePage`; `plugin_reviewqueue_createPage` reports `status: "queued"`.
+13. Same flow with a token for `martin` → `createPage` reports `status: "live"`,
+    page is immediately live. The endpoint's allowlist is a property of the
+    endpoint, not of the caller.
 
 ### Reviewer UX
 
@@ -115,6 +120,47 @@ remote API, ACL, rendering) and can only really be verified end-to-end.
     own unreviewed draft in one call (unlike `core.searchPages`, which never
     sees the draft — ADR-0004), reporting which is which; `scope=live`
     narrows to only the former.
+
+### Agent confinement (Phase 11, ADR-0007)
+
+24. **Entry-script allowlist.** `kail` is refused (403) on `lib/exe/jsonrpc.php`,
+    `lib/exe/xmlrpc.php`, `feed.php` and `lib/exe/openapi.php`, and still reaches
+    `doku.php`, `lib/exe/css.php`, `lib/exe/opensearch.php` and our MCP endpoint.
+    `martin` is unaffected on every one of them.
+25. **No historical revisions, on any path.** With a page that really has an
+    older revision containing a marker string, `martin` can read it back via
+    `?rev=` while `kail` is refused on all of `?rev=`, `?at=`, `do=diff&rev=`,
+    `do=export_raw&rev=`, `fetch.php?rev=` and `detail.php?rev=` — and the
+    marker appears in none of those responses. `rev=0` is the current revision,
+    not history, and stays allowed. This is the scenario the whole phase exists
+    for; an act allowlist alone would pass it while leaving `?rev=` open.
+26. **Act and ajax allowlists.** `do=revisions|diff|recent|mediadetail|subscribe|profile`
+    are refused for `kail` with a notice, `do=show|search|index|edit` are not;
+    ajax `call=mediadiff|mediadetails` are refused, `call=qsearch` is not.
+27. **Tool schema invariants**, walked recursively over the whole `tools/list`
+    output rather than against known-bad tool names: no node has type `array`
+    without `items` (Google's Gemini API rejects the entire request over one
+    such schema, taking all tools down with it), every tool has a non-empty
+    description and title, every input schema is an object.
+28. **The allowlist is the audit.** The advertised tool list equals the audited
+    map exactly; every remote method the wiki has (read from core's own OpenAPI
+    spec, so a method added by an upgrade or a new plugin shows up) is either on
+    that map or refused **by name on `tools/call`**, not merely hidden from
+    `tools/list`.
+
+29. **The media manager is closed, and both reasons stay closed.** As `kail`,
+    `lib/exe/mediamanager.php` is refused and `do=media` is swapped for `show`;
+    a `mediado=save` POST carrying an IPTC headline leaves the live file
+    unchanged, creates no attic revision and adds no queue entry (before the
+    fix it wrote the marker straight into the live JPEG); and
+    `tab_details=history` discloses no revision timestamp on either URL.
+    Reading and writing media through `core.getMediaInfo`/`core.saveMedia`
+    still works, the write still queued.
+30. **No tool description names a tool the allowlist removed.** Walked over the
+    whole `tools/list` output: no description mentions `core.savePage`,
+    `core.appendPage` or `core.getPage`, since those docblocks are the only
+    instructions the model gets and would otherwise send it to a tool that
+    answers "there is no tool called…".
 
 ### Author-side change lifecycle (Phase 10, ADR-0006)
 
