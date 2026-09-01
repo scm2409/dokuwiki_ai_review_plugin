@@ -2,6 +2,7 @@
 
 namespace dokuwiki\plugin\reviewqueue\meta;
 
+use dokuwiki\ErrorHandler;
 use dokuwiki\Remote\AccessDeniedException;
 use dokuwiki\Remote\JsonRpcServer;
 use dokuwiki\Remote\RemoteException;
@@ -155,12 +156,21 @@ class McpServer extends JsonRpcServer
 
         try {
             $result = $this->remote->call($method, $args['arguments'] ?? []);
-        } catch (\Throwable $e) {
-            // Missing credentials are for the client to fix; anything else is
-            // something the model can see and work around, so it comes back as
-            // a tool result rather than a protocol error.
+        } catch (AccessDeniedException | RemoteException $e) {
+            // Missing credentials are for the client to fix; anything else the
+            // API deliberately reported is something the model can see and work
+            // around, so it comes back as a tool result rather than a protocol
+            // error.
             if ($e instanceof AccessDeniedException && $INPUT->server->str('REMOTE_USER') === '') throw $e;
             return $this->mcpToolResult($this->explain($e->getMessage()), true);
+        } catch (\Throwable $e) {
+            // Anything else is a genuine server fault - a TypeError, a fatal in
+            // a helper. Reporting it as a tool result would hand the model
+            // internal detail (class names, paths) and leave no trace in the
+            // error log for whoever has to fix it, so log it and let mcp.php's
+            // handler turn it into a 500.
+            ErrorHandler::logException($e);
+            throw $e;
         }
 
         return $this->mcpToolResult($result);

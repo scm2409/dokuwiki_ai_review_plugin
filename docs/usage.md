@@ -81,15 +81,18 @@ Since [ADR-0007](design/adr-0007-agent-confinement.md) such an account is confin
 to a capability allowlist on **every** path — MCP, remote API and browser alike —
 not just held back on writes.
 
-**It can:** read current pages, search, browse the index, read and upload media,
-edit and save (into the queue), and use the `plugin.reviewqueue.*` tools including
-`createPage` and `deletePage`.
+**It can:** read current pages, search, browse the index, edit and save (into the
+queue), use the `plugin.reviewqueue.*` tools including `createPage` and
+`deletePage`, and read and upload media through the API (`core.getMedia`,
+`core.saveMedia`, …) — media writes are queued like any other change.
 
 **It cannot:** see page or media **history** by any route (`do=revisions`, `do=diff`,
 `do=recent`, `?rev=`, `?at=`, `feed.php`, `core.getPageHistory`, the media-diff ajax
 calls — all refused); reach `lib/exe/jsonrpc.php` or `lib/exe/xmlrpc.php` at all;
-change its own profile or password; or call any remote method outside the allowlist,
-including ones a plugin installed later might add.
+use the browser **media manager** (`do=media`, `lib/exe/mediamanager.php`), whose
+`mediado=save` writes IPTC metadata into the live file without firing either media
+event the plugin hooks; change its own profile or password; or call any remote
+method outside the allowlist, including ones a plugin installed later might add.
 
 A **human** placed under review is confined identically. That is the price of a
 single policy — which accounts pay it is a configuration decision (`review_users`).

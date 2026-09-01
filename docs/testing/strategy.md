@@ -148,6 +148,20 @@ remote API, ACL, rendering) and can only really be verified end-to-end.
     that map or refused **by name on `tools/call`**, not merely hidden from
     `tools/list`.
 
+29. **The media manager is closed, and both reasons stay closed.** As `kail`,
+    `lib/exe/mediamanager.php` is refused and `do=media` is swapped for `show`;
+    a `mediado=save` POST carrying an IPTC headline leaves the live file
+    unchanged, creates no attic revision and adds no queue entry (before the
+    fix it wrote the marker straight into the live JPEG); and
+    `tab_details=history` discloses no revision timestamp on either URL.
+    Reading and writing media through `core.getMediaInfo`/`core.saveMedia`
+    still works, the write still queued.
+30. **No tool description names a tool the allowlist removed.** Walked over the
+    whole `tools/list` output: no description mentions `core.savePage`,
+    `core.appendPage` or `core.getPage`, since those docblocks are the only
+    instructions the model gets and would otherwise send it to a tool that
+    answers "there is no tool called…".
+
 ### Author-side change lifecycle (Phase 10, ADR-0006)
 
 22. The central regression this phase exists to fix: `kail` uses a range

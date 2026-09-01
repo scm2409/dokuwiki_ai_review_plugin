@@ -31,12 +31,21 @@ test('MCP exposes the reviewqueue tools and nothing outside the allowlist', asyn
   expect(names).not.toContain('core_savePage');
   expect(names).not.toContain('core_appendPage');
 
-  // The descriptions are what steer an agent, so they must not be the
-  // garbled docblock fragments DokuWiki's parser produces from multi-line
+  // The descriptions are what steer an agent, so they must not be the garbled
+  // docblock fragments DokuWiki's parser produces from multi-line
   // @param/@return tags (see ADR-0004).
   const getPageToEdit = tools.find((t) => t.name === 'plugin_reviewqueue_getPageToEdit');
-  expect(getPageToEdit.description).toContain('instead of core.getPage');
+  expect(getPageToEdit.description.length).toBeGreaterThan(120);
+  expect(getPageToEdit.description).toContain('pending');
   expect(getPageToEdit.annotations.title).not.toMatch(/^[a-z]|\)$/);
+
+  // And no description may send the agent to a tool the allowlist removed -
+  // these docblocks are the only instructions the model gets, so naming
+  // core.savePage or core.getPage in one is a dead end it cannot recover from.
+  const misdirecting = tools.filter((t) =>
+    /core\.(savePage|appendPage|getPage)\b/.test(t.description)
+  );
+  expect(misdirecting.map((t) => t.name)).toEqual([]);
 });
 
 test('martin editing through MCP is published immediately', async ({ request }) => {

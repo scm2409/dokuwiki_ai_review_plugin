@@ -21,6 +21,24 @@ if (!defined('DOKU_INC')) define('DOKU_INC', __DIR__ . '/../../../');
 require_once(DOKU_INC . 'inc/init.php');
 session_write_close();
 
+// This file stays web-reachable even when the plugin is disabled, and every
+// tool decision here depends on helper/capability.php. Without the helper the
+// allowlist cannot be consulted at all, so refuse rather than fatal on the
+// first null dereference - the fail-closed direction, and a legible answer for
+// whoever is looking at a client that suddenly stopped working.
+if (!plugin_load('helper', 'reviewqueue_capability')) {
+    http_status(503);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'jsonrpc' => '2.0',
+        'error' => [
+            'code' => -32603,
+            'message' => 'The reviewqueue plugin is not enabled, so this endpoint cannot serve tools.',
+        ],
+    ], JSON_THROW_ON_ERROR);
+    exit;
+}
+
 $server = new McpServer();
 
 try {

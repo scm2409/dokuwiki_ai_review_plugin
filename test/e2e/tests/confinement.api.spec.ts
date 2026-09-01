@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { tokens, mcpToolsList, MCP_ENDPOINT } from './_helpers';
+import { MCP_ENDPOINT, cookieHeaderFor, mcpToolsList, rpc, tokens } from './_helpers';
 
 // ADR-0007: a review-scoped account is confined at three gates - entry script,
 // do= action, and MCP tool - all of which read helper/capability.php.
@@ -154,6 +154,94 @@ test.describe('act and ajax allowlists', () => {
       headers: auth(tokens.kail),
     });
     expect(ok.status()).toBe(200);
+  });
+});
+
+test.describe('the media manager is closed, and why', () => {
+  // Both of these were live bypasses found by /code-review on this branch.
+  // The media manager reaches two routes no other gate catches, which is why
+  // lib/exe/mediamanager.php and do=media are off the allowlists entirely
+  // rather than filtered by mediado=/tab_details= value.
+  const PNG_JPEG =
+    '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwc' +
+    'KDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAA' +
+    'AAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+
+  let mediaId: string;
+
+  test.beforeAll(async ({ request }) => {
+    mediaId = `metaguard${Date.now()}:photo.jpg`;
+    const res = await rpc(request, tokens.martin, 'core.saveMedia', {
+      media: mediaId,
+      base64: PNG_JPEG,
+    });
+    expect(res.result).toBe(true);
+  });
+
+  test('kail cannot reach the media manager at all', async ({ request }) => {
+    for (const path of [
+      `/lib/exe/mediamanager.php?image=${mediaId}`,
+      `/doku.php?do=media&image=${mediaId}`,
+    ]) {
+      const res = await request.get(path, { headers: auth(tokens.kail) });
+      const body = await res.text();
+      // mediamanager.php is refused outright; do=media is swapped for 'show'.
+      expect(
+        res.status() === 403 || body.includes('not available to your account'),
+        `${path} must be refused`
+      ).toBe(true);
+    }
+  });
+
+  test('mediado=save cannot write IPTC metadata into the live file', async ({ request }) => {
+    // core's media_metasave() fires neither MEDIA_UPLOAD_FINISH nor
+    // MEDIA_DELETE_FILE, so action/media.php never sees it: reachable, this
+    // publishes an unreviewed change to a live file and pushes an attic
+    // revision. The plugin's core guarantee, on a media path this phase opened.
+    const cookie = cookieHeaderFor('kail');
+    const marker = `PWNED${Date.now()}`;
+
+    const res = await request.post('/lib/exe/mediamanager.php', {
+      headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+      form: {
+        sectok: '',
+        img: mediaId,
+        mediado: 'save',
+        'meta[Iptc.Headline]': marker,
+      },
+    });
+    expect(res.status()).toBe(403);
+
+    // And the live file is untouched, checked independently of the status code.
+    const file = await request.get(`/lib/exe/fetch.php?media=${mediaId}`, {
+      headers: auth(tokens.martin),
+    });
+    expect(Buffer.from(await file.body()).toString('latin1')).not.toContain(marker);
+  });
+
+  test('the media history tab does not disclose revisions', async ({ request }) => {
+    // tab_details=history renders the media revision list with no rev/at
+    // parameter, so requestsRevision() cannot catch it - the entry script and
+    // act allowlists are what close it.
+    for (const path of [
+      `/lib/exe/mediamanager.php?image=${mediaId}&tab_details=history`,
+      `/doku.php?do=media&image=${mediaId}&tab_details=history`,
+    ]) {
+      const res = await request.get(path, { headers: auth(tokens.kail) });
+      const body = await res.text();
+      expect(body, `${path} must not disclose a revision timestamp`).not.toMatch(/rev=1\d{9}/);
+    }
+  });
+
+  test('kail still reads and writes media through the tools it does have', async ({ request }) => {
+    const read = await rpc(request, tokens.kail, 'core.getMediaInfo', { media: mediaId });
+    expect(read.result).toBeTruthy();
+
+    const write = await rpc(request, tokens.kail, 'core.saveMedia', {
+      media: `metaguardown${Date.now()}.jpg`,
+      base64: PNG_JPEG,
+    });
+    expect(write.error!.message).toMatch(/review/i);
   });
 });
 

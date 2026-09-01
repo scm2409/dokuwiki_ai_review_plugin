@@ -15,7 +15,7 @@ Status anchor across sessions. Read this before starting a new work session.
 | 8 | remote.php + MCP verification | ✅ done | `main` | moved up due to ADR-0004; 4 MCP tools verified live |
 | 9 | Hardening, security review, docs | ✅ done | `main` | ACL gap closed, CLI, usage.md, 46 tests |
 | 10 | Range-addressed access + author change lifecycle | ✅ done | `phase-10-page-ranges` | ADR-0005/ADR-0006; 12 new remote methods, 81/81 tests green |
-| 11 | Agent confinement (capability allowlist) | ✅ done | `phase-11-agent-confinement` | ADR-0007; own MCP endpoint, 3 gates, 107/107 tests green |
+| 11 | Agent confinement (capability allowlist) | ✅ done | `phase-11-agent-confinement` | ADR-0007; own MCP endpoint, 3 gates, 112/112 tests green |
 
 The original plan (phases 0-9) is located at
 `/home/martin/.claude/plans/ber-neues-projekt-starten-atomic-feigenbaum.md`. Phase 10's
@@ -67,6 +67,16 @@ a page id into a silent orphan page) and `deletePage` (every write tool refuses 
 page on purpose, so a deletion should be explicit). Both refuse to stack on an open draft,
 enforcing ADR-0004's rule instead of only warning about it — which means stacking is now
 reachable *only* through the browser edit form, where its warnings are still tested.
+
+`/code-review` before the merge found two live bypasses, both reproduced and then
+closed: core's `media_metasave()` (`mediado=save` in the media manager) wrote IPTC
+fields into a **live** media file while firing neither media event the plugin hooks —
+an unreviewed publish that had been reachable since phase 7, and that this phase had
+newly documented as safe; and `tab_details=history` disclosed media revisions with no
+`rev`/`at` parameter for the revision rule to catch. Both are closed by refusing
+`lib/exe/mediamanager.php` and the `media` act outright, keeping the gate a list of
+doors rather than a growing set of parameter special-cases. Media read/write over the
+API is unaffected. See `write-path-audit.md`, which had missed this path.
 
 Also fixed here, found while testing: `searchWithContext`'s `SEARCH_MAX_PAGES` cap counted
 pending records *examined* rather than *matches*, and `myPending()` is oldest-first, so an

@@ -98,7 +98,6 @@ Deny by default. A review-scoped account may reach only:
 | `lib/exe/ajax.php` | edit locking, drafts, search suggestions, media list; narrowed by a call allowlist |
 | `lib/exe/fetch.php` | media delivery |
 | `lib/exe/detail.php` | media detail page |
-| `lib/exe/mediamanager.php` | media upload UI |
 | `lib/exe/css.php`, `js.php`, `jquery.php`, `manifest.php` | static assets |
 | `lib/plugins/reviewqueue/mcp.php` | our own MCP endpoint |
 
@@ -127,14 +126,39 @@ history" true.
 
 ### 3. Act allowlist (`ACTION_ACT_PREPROCESS`), trimmed
 
-Kept: `show`, `search`, `index`, `backlink`, `sitemap`, `media`, `login`,
-`logout`, `denied`, `draftdel`, `locked`, `redirect`, `edit`, `preview`,
-`save`, `cancel`, `conflict`, `draft`, `admin`.
+Kept: `show`, `search`, `index`, `backlink`, `sitemap`, `login`, `logout`,
+`denied`, `draftdel`, `locked`, `redirect`, `edit`, `preview`, `save`,
+`cancel`, `conflict`, `draft`, `admin`.
 
-Removed: `revisions`, `diff`, `recent` (history), `mediadetail` (media history
-table), `subscribe` (change notifications by mail are history by another
+Removed: `revisions`, `diff`, `recent` (history), `media` and `mediadetail`
+(see 4a), `subscribe` (change notifications by mail are history by another
 route), `profile` (the agent must not change its own credentials), `check`,
 `resendpwd`.
+
+### 4a. The media manager is closed entirely
+
+`lib/exe/mediamanager.php` and the `media` act are refused, not filtered. Both
+reach two routes that no other gate in this ADR catches, found by `/code-review`
+on this branch and reproduced live before the fix:
+
+- **`mediado=save`** reaches core's `media_metasave()`, which writes IPTC fields
+  straight into the live file, pushes an attic revision and appends a changelog
+  entry — while firing **neither** `MEDIA_UPLOAD_FINISH` nor
+  `MEDIA_DELETE_FILE`. `action/media.php` hooks only those two, so the change is
+  published unreviewed. This broke the plugin's central guarantee, on a media
+  path this very phase opened.
+- **`tab_details=history`** renders the media revision list with **no `rev`/`at`
+  parameter at all**, so the revision rule in section 2 cannot see it. It
+  disclosed old revision timestamps and their authors.
+
+Refusing the two entry points closes both at once and keeps the gate a list of
+doors rather than a growing set of `mediado=`/`tab_details=` special cases — the
+same reason section 1 is an allowlist. Nothing the operator asked for is lost:
+the agent reads and writes media through `core.listMedia`, `getMedia`,
+`getMediaInfo`, `saveMedia` and `deleteMedia` on the MCP endpoint, where writes
+are queued like any other change, and media embedded in pages still renders via
+`fetch.php`. What goes is the browser media-manager UI, which only a human
+placed under review would have used.
 
 `search` and `index` stay by explicit operator decision: without them the agent
 cannot find pages at all, and neither exposes revisions.

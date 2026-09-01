@@ -44,11 +44,26 @@ class helper_plugin_reviewqueue_capability extends Plugin
         // edit locking, draft handling, search suggestions, media browsing;
         // narrowed further by AJAX_CALLS below
         'lib/exe/ajax.php',
-        // media delivery and the media manager - the operator wants the agent
-        // to read and write media
+        // Media delivery, so media embedded in pages still renders.
+        //
+        // lib/exe/mediamanager.php is deliberately NOT here, and neither is the
+        // 'media' act below. The media manager carries two routes no other gate
+        // catches: `mediado=save` reaches core's media_metasave(), which writes
+        // IPTC fields straight into the live file, pushes an attic revision and
+        // logs a changelog entry without firing MEDIA_UPLOAD_FINISH or
+        // MEDIA_DELETE_FILE - so action/media.php never sees it and the change
+        // is published unreviewed; and `tab_details=history` renders the media
+        // revision list with no rev/at parameter at all, so requestsRevision()
+        // cannot catch it either. Refusing the two entry points closes both at
+        // once, instead of chasing individual mediado=/tab_details= values.
+        //
+        // Nothing the operator asked for is lost: the agent reads and writes
+        // media through core.listMedia/getMedia/getMediaInfo/saveMedia/
+        // deleteMedia on the MCP endpoint, where writes are queued like any
+        // other change. What goes is the browser media-manager UI, which only a
+        // human placed under review would have used.
         'lib/exe/fetch.php',
         'lib/exe/detail.php',
-        'lib/exe/mediamanager.php',
         // Static assets and service metadata, no wiki content of any kind.
         // These five are exactly the entry scripts that define NOSESSION, so
         // auth_setup() never runs for them and there is no authenticated user
@@ -81,8 +96,10 @@ class helper_plugin_reviewqueue_capability extends Plugin
      * @var string[]
      */
     public const ACTS = [
-        // reading and navigating
-        'show', 'search', 'index', 'backlink', 'sitemap', 'media',
+        // reading and navigating ('media' is absent - see ENTRY_SCRIPTS above:
+        // do=media reaches the same media_metasave() and history tab that
+        // lib/exe/mediamanager.php does)
+        'show', 'search', 'index', 'backlink', 'sitemap',
         // session and error plumbing
         'login', 'logout', 'denied', 'locked', 'redirect', 'draftdel',
         // editing, which is what the queue exists to intercept
@@ -251,10 +268,17 @@ class helper_plugin_reviewqueue_capability extends Plugin
         $root = realpath(DOKU_INC);
         if ($real === false || $root === false) return '';
 
-        $root = rtrim($root, '/') . '/';
+        // Normalise before comparing, not just on the way out: realpath()
+        // returns backslashes on Windows, so a prefix built with a forward
+        // slash could never match and this would return '' for every request -
+        // which the caller treats as a refusal, locking a review-scoped
+        // account out of the entire wiki rather than confining it.
+        $real = str_replace('\\', '/', $real);
+        $root = rtrim(str_replace('\\', '/', $root), '/') . '/';
+
         if (strpos($real, $root) !== 0) return '';
 
-        return str_replace('\\', '/', substr($real, strlen($root)));
+        return substr($real, strlen($root));
     }
 
     /**

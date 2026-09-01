@@ -7,16 +7,17 @@ use dokuwiki\Remote\RemoteException;
 use dokuwiki\Utf8\PhpString;
 
 /**
- * Remote API for the review queue. Every public method here is exported
- * automatically as an MCP tool by the mcp plugin (see
- * docs/research/kaos-hooks.md), so the docblocks below double as the tool
- * descriptions an agent reads - keep them explicit and unambiguous.
+ * Remote API for the review queue. A public method here becomes an MCP tool
+ * once it is on helper/capability.php's TOOLS allowlist (ADR-0007), and the
+ * docblocks below double as the tool descriptions an agent reads - keep them
+ * explicit and unambiguous, and never point at a method that is not on that
+ * list.
  *
  * These exist because a queued change is deliberately invisible in the
- * normal read path (ADR-0001/ADR-0004): core.getPage returns the live
- * text, and searches never match unreviewed drafts. Without these methods
- * an agent would silently keep rewriting the live revision and clobber
- * its own earlier, still-unreviewed work.
+ * normal read path (ADR-0001/ADR-0004): the published text is all the wiki
+ * will show you, and searches never match unreviewed drafts. Without these
+ * methods an agent would silently keep rewriting the live revision and
+ * clobber its own earlier, still-unreviewed work.
  *
  * IMPORTANT for the docblocks below: keep every @param/@return/@throws tag
  * on a SINGLE line. DokuWiki's docblock parser strips only the first line
@@ -35,10 +36,11 @@ class remote_plugin_reviewqueue extends RemotePlugin
     /**
      * Get the page text to base an edit on, accounting for your own unreviewed changes.
      *
-     * ALWAYS use this instead of core.getPage before editing a page on a wiki
-     * with a review queue. If you have an unreviewed change pending on this page,
-     * this returns that pending text - so your next edit builds on your own latest
-     * work instead of silently reverting it. Otherwise it returns the live text.
+     * ALWAYS call this before editing a page on a wiki with a review queue - it is the
+     * only read that accounts for your own pending work. If you have an unreviewed
+     * change pending on this page, this returns that pending text, so your next edit
+     * builds on your own latest work instead of silently reverting it. Otherwise it
+     * returns the live text.
      *
      * Returns keys: "text" (the wiki text to edit), "source" ("pending" if it came
      * from your unreviewed change, "live" if from the published page), "pendingId"
@@ -218,7 +220,7 @@ class remote_plugin_reviewqueue extends RemotePlugin
      * Those range tools already continue your existing change under the hood (see
      * docs/design/adr-0006), so prefer them for anything section- or line-sized; use this only
      * for a genuine full rewrite. A change already approved, rejected, conflicted or withdrawn
-     * cannot be continued this way - submit a new one with core.savePage instead.
+     * cannot be continued this way - submit a new one with the range write tools instead.
      *
      * Returns "status" (always "updated"), "pendingId", "target" (page id), "contentHash" (a
      * short hash of the new text, for a later write tool's $expect), "bytesBefore" and
@@ -597,6 +599,14 @@ class remote_plugin_reviewqueue extends RemotePlugin
         $page = cleanID($page);
         if ($page === '') throw new RemoteException('No page id given', 131);
 
+        // Caught here rather than in writeEffectiveText(), whose empty-text
+        // message points at deletePage - which would then answer "does not
+        // exist, so there is nothing to delete" and leave the caller going in
+        // circles.
+        if (trim((string) $text) === '') {
+            throw new RemoteException("A new page needs text - '$page' would be created empty", 131);
+        }
+
         // Creating needs more than the read access checkPageAccess() asks for.
         if (auth_quickaclcheck($page) < AUTH_CREATE) {
             throw new AccessDeniedException('You are not allowed to create this page', 111);
@@ -683,8 +693,8 @@ class remote_plugin_reviewqueue extends RemotePlugin
      * and use replaceLines or replaceText instead.
      *
      * If you have an open draft for this page, this continues it in place rather than creating
-     * a new one (see docs/design/adr-0006) - prefer this over core.savePage for anything
-     * section-sized. Pass $expect (the section's "hash" from getPageOutline/getSection) to
+     * a new one (see docs/design/adr-0006). Pass $expect (the section's "hash" from
+     * getPageOutline/getSection) to
      * refuse the write if the section changed since you read it.
      *
      * Returns "status" ("live" if you are not subject to review and this published
@@ -759,7 +769,7 @@ class remote_plugin_reviewqueue extends RemotePlugin
      * $section is resolved the same way as in getSection. Continues your existing open draft
      * for this page in place, same as replaceSection - see there for details. Refused if it
      * would leave the page empty (that is a deletion of the whole page, which goes through
-     * core.savePage instead).
+     * deletePage instead).
      *
      * Returns the same "status"/"pendingId"/"target" as replaceSection.
      *
@@ -1133,8 +1143,8 @@ class remote_plugin_reviewqueue extends RemotePlugin
 
     /**
      * A range write is for changing part of a page, not for deleting all of it - that is
-     * always core.savePage's job (with an empty $text), so it goes through the ordinary
-     * create/change/delete review policy instead of silently falling out of a splice.
+     * deletePage's job, so a deletion is always something the caller asked for rather than
+     * something that fell out of a splice.
      *
      * @param string $newText the full page text a range write is about to produce
      * @param string $page for the error message

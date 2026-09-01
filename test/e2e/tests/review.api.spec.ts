@@ -61,3 +61,20 @@ test('JSON-RPC: martin savePage goes straight through', async ({ request }) => {
   const page = await request.get(`/doku.php?id=${pageId}`);
   expect(await page.text()).toContain('martin api content');
 });
+
+test('createPage refuses empty text with its own message, not the deletion one', async ({
+  request,
+}) => {
+  // writeEffectiveText()'s empty-text guard points at deletePage, which would
+  // then answer "does not exist, so there is nothing to delete" - a dead end
+  // for an agent following the message it was given.
+  const res = await rpc(request, tokens.kail, 'plugin.reviewqueue.createPage', {
+    page: `emptycreate${Date.now()}`,
+    text: '   ',
+    summary: 's',
+  });
+
+  expect(res.error).toBeTruthy();
+  expect(res.error!.message).toMatch(/needs text/);
+  expect(res.error!.message).not.toMatch(/deletePage/);
+});
