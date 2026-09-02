@@ -3,6 +3,7 @@
 use dokuwiki\Extension\ActionPlugin;
 use dokuwiki\Extension\Event;
 use dokuwiki\Extension\EventHandler;
+use dokuwiki\Remote\RemoteException;
 
 /**
  * Holds back media uploads from review-scoped users, the same way
@@ -33,8 +34,29 @@ class action_plugin_reviewqueue_media extends ActionPlugin
      *
      * MEDIA_DELETE_FILE is preventable (inc/media.php:276). Its caller,
      * media_delete(), reports outcomes as DOKU_MEDIA_* constants rather than
-     * messages, so there is no channel to explain the queueing here; the
-     * agent-facing explanation comes from the queue tools instead.
+     * messages, so unlike media_save() it offers no result channel to explain
+     * the queueing through: a prevented deletion looks to ApiCore::deleteMedia()
+     * exactly like a failed one, and the caller got 'Failed to delete media
+     * file' for a change that was in fact queued. An agent cannot tell that
+     * apart from a real failure and will retry, stacking duplicate entries.
+     *
+     * So the same throw-as-success-signal convention the page save path uses
+     * applies here (ADR-0003): a hard, catchable RemoteException carrying the
+     * change number. The browser media manager gets a msg() instead, because a
+     * thrown exception would turn into an error page there.
+     *
+     * That browser message is not the whole output: returning normally leaves
+     * media_delete() reporting 0, so lib/exe/mediamanager.php:120 adds its own
+     * red "Unable to delete x" underneath ours. Nothing here can suppress it -
+     * the only lever the event offers is $data['unl'], and claiming a deletion
+     * that did not happen is worse than a redundant notice. It is also not
+     * reachable today: a review-scoped account is refused on
+     * lib/exe/mediamanager.php outright, and on lib/exe/ajax.php's
+     * 'mediadetails' which require_once's it (ADR-0007, helper/capability.php).
+     * An operator who widens either allowlist gets the contradictory pair.
+     *
+     * @throws RemoteException for non-interactive callers, always: queued or
+     *                          failed, the deletion did not happen
      */
     public function handleDelete(Event $event, $param)
     {
@@ -49,26 +71,44 @@ class action_plugin_reviewqueue_media extends ActionPlugin
 
         $event->preventDefault();
 
+        // media_delete() has exactly two callers in Kaos: ApiCore::deleteMedia()
+        // and lib/exe/mediamanager.php, which is the only one that defines this
+        // constant - so it says which of the two feedback channels below fits.
+        $isBrowser = defined('DOKU_MEDIAMANAGER');
+        $target = $event->data['id'];
+
         /** @var helper_plugin_reviewqueue_store $store */
         $store = $this->loadHelper('reviewqueue_store');
 
         try {
-            $store->enqueue([
+            $id = $store->enqueue([
                 'type'      => 'media',
                 'operation' => 'delete',
-                'target'    => $event->data['id'],
+                'target'    => $target,
                 'author'    => $user,
                 'summary'   => '',
                 'minor'     => false,
                 'baseRev'   => null,
                 'baseHash'  => '',
-                'origin'    => 'remote',
+                'origin'    => $isBrowser ? 'ui' : 'remote',
             ], '');
         } catch (\Throwable $e) {
             \dokuwiki\ErrorHandler::logException($e);
             // preventDefault() already stopped the deletion, so failing to
             // queue it still leaves the file in place - fail-closed.
+            if ($isBrowser) {
+                msg($this->getLang('queue_failed'), -1);
+                return;
+            }
+            throw new RemoteException($this->getLang('queue_failed'), 500, $e);
         }
+
+        $message = sprintf($this->getLang('queued_delete'), $target, $id);
+        if ($isBrowser) {
+            msg($message);
+            return;
+        }
+        throw new RemoteException($message, 1000);
     }
 
     public function handleUpload(Event $event, $param)

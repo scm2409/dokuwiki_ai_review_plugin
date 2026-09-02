@@ -40,6 +40,31 @@ file.
 Deliberately queued instead of blocked: deletion is a reviewable intent, just like
 deleting a page (empty text), which has always gone through the queue.
 
+**Re-checked on 2026-09-02** (the question being whether this path still bypasses the
+queue and should therefore be dropped from the allowlist): it does not - reproduced
+live, the file stays and a `type=media`/`operation=delete` entry appears. The row above
+holds. But the check found two defects in the path either side of the queue, both since
+fixed and both now covered by `media.martin.spec.ts` (strategy scenarios 31-32); this
+row had been asserted since phase 9 without any test ever calling the method, which is
+how they survived:
+
+- *No queue feedback.* Unlike `MEDIA_UPLOAD_FINISH`, `MEDIA_DELETE_FILE` has no result
+  channel: after `preventDefault()` `media_delete()` returns `0`, which
+  `ApiCore::deleteMedia()` turns into `RemoteException('Failed to delete media file')`.
+  The caller was told its deletion had failed when it had in fact been queued - and an
+  agent that cannot tell the two apart retries, stacking duplicate entries. Fixed the
+  way ADR-0003 handles a queued page save: `action/media.php` throws the queue
+  confirmation itself (`msg()` on the browser path, which the media manager would
+  otherwise turn into an error page).
+- *Approval could not complete.* `helper/apply.php` compared `media_delete()`'s return
+  value against `DOKU_MEDIA_DELETED` and a `DOKU_MEDIA_NOT_EXIST` that Kaos does not
+  define (`inc/defines.php:63-66` has exactly four). The return value is a bitmask:
+  deleting the last file in a namespace yields `DOKU_MEDIA_DELETED | DOKU_MEDIA_EMPTY_NS`,
+  so a successful deletion took the failure branch and fatally errored on the missing
+  constant - file deleted, change stuck `pending`, reviewer told the decision could not
+  be applied, and every retry hit the same fatal. Now a bit test plus a `media_exists()`
+  check for "already gone".
+
 ### Actions from third-party plugins
 
 Plugins bring their own actions (`do=…`) that change the wiki without touching

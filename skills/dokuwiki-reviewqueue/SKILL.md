@@ -120,12 +120,17 @@ status is the success path, not a failure to retry. Do not retry the write, do
 not try to work around it, and **do not tell the user the page was updated.**
 Say it was submitted for review and is awaiting approval.
 
-A media upload (`core.saveMedia`) is the one write that still reports a queued
-change by **returning an error**, because core's method has no other channel:
+The two media writes (`core.saveMedia` and `core.deleteMedia`) are the ones
+that still report a queued change by **returning an error**, because core's
+methods have no other channel:
 
 > Your change to 'start' was submitted for review as change #42. It is NOT live yet.
 
-Take the change id from it. The range write tools report the same
+> Deletion of 'logo.png' was submitted for review as change #43. The file is NOT deleted yet.
+
+Take the change id from it. Anything else the two report *is* a real failure -
+in particular `Failed to delete media file`, which means the deletion neither
+happened nor was queued. The range write tools report the same
 outcome via `status: "queued"`/`"updated"` instead of an error - see above.
 
 ## Searching: use `searchWithContext`, not `core.searchPages`

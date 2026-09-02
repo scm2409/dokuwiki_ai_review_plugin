@@ -243,9 +243,14 @@ class helper_plugin_reviewqueue_apply extends Plugin
             $INPUT->server->set('REMOTE_USER', $originalUser);
         }
 
-        // Already gone is an acceptable outcome for a deletion; anything else
-        // means the file is still there and the approval did not take effect.
-        if ($res !== DOKU_MEDIA_DELETED && $res !== DOKU_MEDIA_NOT_EXIST) {
+        // media_delete() reports success as a bitmask, not a single value: it
+        // returns DOKU_MEDIA_DELETED | DOKU_MEDIA_EMPTY_NS when the file was
+        // the last one in its namespace (inc/media.php:296). Comparing the
+        // whole value therefore called a successful deletion a failure - and
+        // there is no DOKU_MEDIA_NOT_EXIST constant to compare against either
+        // (inc/defines.php:63-66 defines exactly four), so "already gone" has
+        // to be read off the filesystem. Test the bit, then the file.
+        if (!($res & DOKU_MEDIA_DELETED) && media_exists($record['target'])) {
             throw new \RuntimeException("reviewqueue: media_delete refused ({$res})");
         }
     }
