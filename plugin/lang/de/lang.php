@@ -1,6 +1,7 @@
 <?php
 
 $lang['queued']         = "Ihre Änderung an '%s' wurde als Änderung #%d zur Prüfung eingereicht. Sie ist NOCH NICHT live.";
+$lang['queued_delete']  = 'Die Löschung von „%s“ wurde als Änderung #%d zur Prüfung eingereicht. Die Datei ist NOCH NICHT gelöscht.';
 $lang['queued_stacked'] = 'Achtung: Für diese Seite liegen bereits ungeprüfte Änderungen %s von Ihnen vor. Diese neue Änderung basiert auf der Live-Fassung, nicht auf jenen — werden alle freigegeben, überschreibt die neueste die frühere Arbeit.';
 $lang['queue_failed']   = 'Die Review-Warteschlange konnte nicht geschrieben werden, Ihre Änderung wurde nicht gespeichert. Bitte versuchen Sie es erneut oder wenden Sie sich an eine Administratorin/einen Administrator.';
 

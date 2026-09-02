@@ -1,6 +1,7 @@
 <?php
 
 $lang['queued']         = "Your change to '%s' was submitted for review as change #%d. It is NOT live yet.";
+$lang['queued_delete']  = "Deletion of '%s' was submitted for review as change #%d. The file is NOT deleted yet.";
 $lang['queued_stacked'] = 'Warning: you already have unreviewed change(s) %s on this page. This new change was based on the live revision, not on those - if all of them are approved, the earlier work will be overwritten.';
 $lang['queue_failed']   = 'The review queue could not be written to, so your change was not saved. Please try again or contact an administrator.';
 

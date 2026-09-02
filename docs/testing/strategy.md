@@ -210,6 +210,24 @@ remote API, ACL, rendering) and can only really be verified end-to-end.
     test → `kail`'s save is rejected with an error, **not** silently switched
     live.
 
+### Media deletions (fix, 2026-09-02)
+
+31. `kail` calls `core.deleteMedia` on a live file → the file is still
+    retrievable via `fetch.php`, a `type=media`/`operation=delete` entry is
+    pending, and the caller gets the queue confirmation ("submitted for review
+    as change #N") rather than core's `Failed to delete media file`. That
+    message is the only signal the caller has: after `preventDefault()`,
+    `media_delete()` returns `0` and `ApiCore::deleteMedia()` cannot tell a
+    queued deletion from a failed one, so without it an agent retries and
+    stacks duplicate entries. Approval then removes the file.
+32. Approving the deletion of the **last file in its namespace** completes the
+    change instead of failing. `media_delete()` returns
+    `DOKU_MEDIA_DELETED | DOKU_MEDIA_EMPTY_NS` there, which the approval path
+    read as a failure (and, comparing against a `DOKU_MEDIA_NOT_EXIST` that
+    Kaos does not define, fatally errored on): file gone, entry stuck
+    `pending`, reviewer told the decision could not be applied. The scenario
+    asserts both halves - the file is gone *and* the change has left the queue.
+
 ## Execution
 
 ```bash

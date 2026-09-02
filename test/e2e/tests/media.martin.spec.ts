@@ -83,3 +83,73 @@ test('martin upload is published immediately, no queue entry', async ({ request 
   const fetched = await request.get(`/lib/exe/fetch.php?media=${mediaId}`);
   expect(fetched.status()).toBe(200);
 });
+
+// Deletions, the other half of the media path. Before this was tested,
+// core.deleteMedia had been listed as "queued" in the write-path audit for two
+// phases without anything ever calling it - which is how both of the bugs
+// these two tests pin down survived: the caller was told the deletion had
+// failed when it had in fact been queued, and approving the deletion of the
+// last file in a namespace fatally errored on a constant Kaos does not define.
+
+test('kail deletion is queued, the file stays live, and the caller is told so', async ({
+  page,
+  request,
+}) => {
+  const mediaId = `deleteme${Date.now()}.png`;
+
+  // Put a file there that is not subject to review, so the deletion is the
+  // only thing under test.
+  await rpc(request, tokens.martin, 'core.saveMedia', {
+    media: mediaId,
+    base64: PNG.toString('base64'),
+  });
+
+  const res = await rpc(request, tokens.kail, 'core.deleteMedia', { media: mediaId });
+  // The throw is the success signal (ADR-0003) - what matters is that it names
+  // the queue rather than reporting a failure the agent would retry.
+  expect(res.error).toBeTruthy();
+  expect(res.error.message).toMatch(/submitted for review as change #\d+/);
+  const rqid = Number(/change #(\d+)/.exec(res.error.message)![1]);
+
+  // Still live: nothing was deleted.
+  expect((await request.get(`/lib/exe/fetch.php?media=${mediaId}`)).status()).toBe(200);
+
+  await page.goto('/doku.php?do=admin&page=reviewqueue');
+  const item = page.locator(`.reviewqueue-item[data-rqid="${rqid}"]`);
+  await expect(item).toContainText(mediaId);
+  await expect(item).toContainText('DELETING');
+
+  await item.locator('button[value="approve"]').click();
+  await expect(page.locator('#dokuwiki__content')).toContainText(`Change #${rqid} approved`);
+
+  expect((await request.get(`/lib/exe/fetch.php?media=${mediaId}`)).status()).toBe(404);
+});
+
+test('approving the deletion of the last file in a namespace completes the change', async ({
+  page,
+  request,
+}) => {
+  // media_delete() returns DOKU_MEDIA_DELETED | DOKU_MEDIA_EMPTY_NS here,
+  // because removing this file empties its namespace - a success the approval
+  // path used to read as a failure.
+  const mediaId = `lonely${Date.now()}:only.png`;
+
+  await rpc(request, tokens.martin, 'core.saveMedia', {
+    media: mediaId,
+    base64: PNG.toString('base64'),
+  });
+
+  const res = await rpc(request, tokens.kail, 'core.deleteMedia', { media: mediaId });
+  const rqid = Number(/change #(\d+)/.exec(res.error.message)![1]);
+
+  await page.goto('/doku.php?do=admin&page=reviewqueue');
+  await page.locator(`.reviewqueue-item[data-rqid="${rqid}"] button[value="approve"]`).click();
+  await expect(page.locator('#dokuwiki__content')).toContainText(`Change #${rqid} approved`);
+
+  expect((await request.get(`/lib/exe/fetch.php?media=${mediaId}`)).status()).toBe(404);
+
+  // And the change is actually done with, not left pending for a reviewer to
+  // trip over a second time.
+  await page.goto('/doku.php?do=admin&page=reviewqueue');
+  await expect(page.locator(`.reviewqueue-item[data-rqid="${rqid}"]`)).toHaveCount(0);
+});

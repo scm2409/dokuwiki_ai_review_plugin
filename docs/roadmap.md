@@ -87,6 +87,20 @@ request over one such schema. Deliberately **not** done: a `restrict_ui` switch 
 editing stays, those edits are queued) and web-server-level blocking (outside a plugin's
 reach; noted in `usage.md` as optional hardening).
 
+
+**Post-completion fix (2026-09-02):** re-checked whether `core.deleteMedia` still
+bypasses the queue (and should therefore be dropped from the ADR-0007 allowlist). It
+does not - the deletion is queued and only carried out on approval. The check did find
+two defects on either side of that queue, both reproduced live and fixed on
+`fix-media-delete-feedback`: the caller was told `Failed to delete media file` for a
+deletion that had in fact been queued (no result channel on `MEDIA_DELETE_FILE`; now
+the same throw-the-confirmation convention as a queued page save, ADR-0003), and
+approving the deletion of the last file in a namespace fatally errored on
+`DOKU_MEDIA_NOT_EXIST`, a constant Kaos does not define, leaving the file deleted but
+the change stuck `pending`. `core.deleteMedia` had been asserted as "queued" in
+[`design/write-path-audit.md`](design/write-path-audit.md) since phase 9 without any
+test ever calling it; testing strategy scenarios 31-32 close that. 114/114 tests green.
+
 ## Decided questions
 
 - Plugin base name: **`reviewqueue`** (decided with the user on 2026-08-08 — more
